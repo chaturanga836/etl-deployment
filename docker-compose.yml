@@ -1,0 +1,186 @@
+name: elt-engine
+
+# Profiles:
+#   full     - entire stack behind nginx on port 80
+#   backend  - postgres, redis, api, worker
+#   frontend - Next.js only (build with remote NEXT_PUBLIC_API_URL)
+#   auth     - postgres + Keycloak
+#
+# Examples:
+#   docker compose --profile full up -d --build
+#   docker compose --profile backend up -d --build
+#   docker compose --profile frontend up -d --build
+#   docker compose --profile auth up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: elt-postgres
+    restart: unless-stopped
+    profiles: [full, backend, auth]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-elt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # Bootstrap catalog only — app databases are created in scripts/init-db.sql
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elt} -d elt_metadata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - elt-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: elt-redis
+    restart: unless-stopped
+    profiles: [full, backend]
+    networks:
+      - elt-net
+
+  api:
+    build:
+      context: ../etl-back
+      dockerfile: Dockerfile
+    image: etl-backend:${IMAGE_TAG:-v1.0.0}
+    container_name: elt-api
+    restart: unless-stopped
+    profiles: [full, backend]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      KC_SERVER_URL: ${KC_SERVER_URL}
+      KEYCLOAK_TOKEN_URL: ${KEYCLOAK_TOKEN_URL}
+      KC_DEV_REALM: ${KC_DEV_REALM}
+      KC_ADMIN_CLIENT_ID: ${KC_ADMIN_CLIENT_ID}
+      KC_ADMIN_CLIENT_SECRET: ${KC_ADMIN_CLIENT_SECRET}
+      SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+    volumes:
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks:
+      - elt-net
+
+  worker:
+    build:
+      context: ../etl-back
+      dockerfile: Dockerfile
+    image: etl-backend:${IMAGE_TAG:-v1.0.0}
+    container_name: elt-worker
+    restart: unless-stopped
+    profiles: [full, backend]
+    command: celery -A core.celery_app.celery_app worker --loglevel=info
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      KC_SERVER_URL: ${KC_SERVER_URL}
+      KEYCLOAK_TOKEN_URL: ${KEYCLOAK_TOKEN_URL}
+      KC_DEV_REALM: ${KC_DEV_REALM}
+      KC_ADMIN_CLIENT_ID: ${KC_ADMIN_CLIENT_ID}
+      KC_ADMIN_CLIENT_SECRET: ${KC_ADMIN_CLIENT_SECRET}
+      SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+    volumes:
+      - backend_logs:/app/logs
+    tmpfs:
+      - /tmp:size=256M,noexec
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+    networks:
+      - elt-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.0
+    container_name: elt-keycloak
+    restart: unless-stopped
+    profiles: [full, auth]
+    command: start-dev
+    env_file: .env
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-elt}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-changeme}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - elt-net
+
+  frontend:
+    build:
+      context: ../elt-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_BUILD_ID: ${NEXT_PUBLIC_BUILD_ID:-production}
+    image: elt-frontend:${IMAGE_TAG:-v1.0.0}
+    container_name: elt-frontend
+    restart: unless-stopped
+    profiles: [full, frontend]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - elt-net
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: elt-proxy
+    restart: unless-stopped
+    profiles: [full]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - elt-net
+
+networks:
+  elt-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_logs:
