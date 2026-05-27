@@ -7,7 +7,21 @@ Orchestration repo for the full ELT Engine stack. This repo contains **no applic
 | [etl-back](https://github.com/chaturanga836/etl-back) | FastAPI API + Celery worker |
 | [elt-frontend](https://github.com/chaturanga836/elt-frontend) | Next.js UI |
 | [trino-keyclock](https://github.com/chaturanga836/trino-keyclock) | Keycloak reference (service inlined here) |
-| **etl-deployment** (this repo) | Compose, nginx, install scripts |
+| **etl-deployment** (this repo) | Runtime bundle, compose templates, renderer |
+| [elt-installer](../elt-installer) | **Customer-facing setup wizard** (control plane) |
+
+## Recommended install path
+
+**Customers** should use the [elt-installer](../elt-installer) web wizard — not raw Docker Compose.
+
+This repo is the **runtime engine** the installer generates config for:
+
+1. User completes wizard in `elt-installer`
+2. Control plane renders `.env` via [`renderer/render.py`](renderer/render.py)
+3. Artifacts land in `generated/{job_id}/`
+4. Docker Compose here starts the product stack
+
+Operators and developers can still use compose directly (below).
 
 ## Prerequisites
 
@@ -56,6 +70,21 @@ On first startup, Postgres runs [`scripts/init-db.sql`](scripts/init-db.sql) and
 | `keycloak` | Keycloak identity provider |
 
 `POSTGRES_DB=postgres` in compose is only the Postgres bootstrap catalog — not application data.
+
+## Template renderer
+
+Convert a deployment JSON (from the installer wizard) into `.env`:
+
+```bash
+python renderer/render.py \
+  --config schema/examples/monolith-bundled.json \
+  --out ./generated/example
+
+cp generated/example/.env .env
+docker compose --profile full up -d --build
+```
+
+Schema: [`schema/deployment.schema.json`](schema/deployment.schema.json)
 
 ## Compose profiles
 

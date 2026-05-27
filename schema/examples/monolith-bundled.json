@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "mode": "monolith",
+  "database": {
+    "source": "bundled",
+    "user": "elt",
+    "password": "changeme",
+    "elt_db_name": "elt_metadata",
+    "keycloak_db_name": "keycloak"
+  },
+  "monolith": {
+    "public_host": "localhost",
+    "use_proxy": true,
+    "ports": {
+      "http": 80,
+      "frontend": 3000,
+      "api": 8000,
+      "keycloak": 8081
+    }
+  },
+  "keycloak": {
+    "admin_user": "admin",
+    "admin_password": "changeme",
+    "realm": "etl-dev",
+    "admin_client_id": "admin-cli",
+    "admin_client_secret": ""
+  },
+  "app": {
+    "name": "ELT Engine",
+    "image_tag": "v1.0.0",
+    "sandbox_enabled": true
+  }
+}
