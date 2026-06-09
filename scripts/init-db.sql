@@ -3,3 +3,4 @@
 
 CREATE DATABASE elt_metadata;
 CREATE DATABASE keycloak;
+CREATE DATABASE elt_agent;

@@ -9,6 +9,9 @@ Orchestration repo for the full ELT Engine stack. This repo contains **no applic
 | [trino-keyclock](https://github.com/chaturanga836/trino-keyclock) | Keycloak reference (service inlined here) |
 | **etl-deployment** (this repo) | Runtime bundle, compose templates, renderer |
 | [elt-installer](../elt-installer) | **Customer-facing setup wizard** (control plane) |
+| [Ai-Agent-framework](../Ai-Agent-framework) | LlamaIndex workflow agent microservice (optional) |
+
+Optional **Ollama** (local LLM): see [`docs/OLLAMA.md`](docs/OLLAMA.md). Service is defined in this repo’s `docker-compose.yml` (profile `ollama`).
 
 ## Recommended install path
 
@@ -33,6 +36,7 @@ python/
   etl-back/
   elt-frontend/
   trino-keyclock/
+  Ai-Agent-framework/   ← optional agent service
   etl-deployment/    ← you are here
 ```
 
@@ -68,6 +72,7 @@ On first startup, Postgres runs [`scripts/init-db.sql`](scripts/init-db.sql) and
 |----------|---------|
 | `elt_metadata` | Backend (pipelines, tasks, connections) |
 | `keycloak` | Keycloak identity provider |
+| `elt_agent` | Agent microservice (job metadata) |
 
 `POSTGRES_DB=postgres` in compose is only the Postgres bootstrap catalog — not application data.
 
@@ -90,14 +95,20 @@ Schema: [`schema/deployment.schema.json`](schema/deployment.schema.json)
 
 | Profile | Services | Use case |
 |---------|----------|----------|
-| `full` | postgres, redis, api, worker, keycloak, frontend, nginx | Single-server install |
-| `backend` | postgres, redis, api, worker | API + worker on one host |
+| `full` | postgres, redis, api, worker, agent-api, keycloak, frontend, nginx | Single-server install |
+| `backend` | postgres, redis, api, worker, agent-api | API + worker on one host |
+| `agent` | agent-api only (with `backend` or `full` postgres/api) | Agent service only |
 | `frontend` | frontend only | UI on a separate host |
 | `auth` | postgres, keycloak | Centralized identity provider |
+| `ollama` | ollama (local LLM) | Optional; combine with `full` or `backend` on RAM-heavy hosts |
 
 ```bash
 # Backend only
 docker compose --profile backend up -d --build
+
+# Full stack + Ollama (16 GB+ RAM recommended)
+docker compose --profile full --profile ollama up -d --build
+docker exec elt-ollama ollama pull llama3.2
 
 # Frontend only (set NEXT_PUBLIC_API_URL to remote API first)
 docker compose --profile frontend up -d --build
@@ -105,6 +116,8 @@ docker compose --profile frontend up -d --build
 # Keycloak only
 docker compose --profile auth up -d
 ```
+
+Workspace **AI & Agent** settings when using Ollama: provider `ollama`, model `llama3.2`, API key any non-empty string, base URL `http://ollama:11434/v1`.
 
 ## Configuration
 
@@ -135,11 +148,44 @@ When using the `full` profile with nginx, the browser talks to one origin (`APP_
 
 When exposing ports 3000 and 8000 directly (without nginx), ensure the backend CORS settings in `etl-back/main.py` include your frontend origin.
 
+## TLS (Let's Encrypt)
+
+The `full` profile nginx proxy supports HTTPS via Certbot webroot. HTTP stays available for certificate renewal and redirects to HTTPS once a cert is installed.
+
+**On your EC2 host** (replace with your domain):
+
+```bash
+# 1. DNS: A records for dtorch.online and www.dtorch.online -> your Elastic IP
+# 2. Security group: allow TCP 80 and 443
+# 3. Start the stack
+docker compose --profile full up -d --build
+
+# 4. Obtain certificate and enable HTTPS
+sudo bash scripts/setup-tls.sh dtorch.online www.dtorch.online
+
+# 5. Point the app at HTTPS (edit .env), then rebuild frontend
+#    APP_URL=https://dtorch.online
+#    NEXT_PUBLIC_API_URL=https://dtorch.online/api/v1
+docker compose --profile full up -d --build frontend
+```
+
+How it works:
+
+| Path | Purpose |
+|------|---------|
+| `/.well-known/acme-challenge/` | Served from `/var/www/letsencrypt` for Certbot |
+| `/etc/letsencrypt/live/current/` | Symlink to the active cert (created by `setup-tls.sh`) |
+| `nginx/ssl.conf` | Generated inside the container when certs exist |
+
+Renewal is automatic via Certbot's deploy hook (`docker exec elt-proxy nginx -s reload`).
+
+Do **not** use `certbot --nginx` — port 80 is owned by the Docker proxy, not host nginx.
+
 ## Production checklist
 
 - [ ] Change all default passwords in `.env`
+- [ ] Run `scripts/setup-tls.sh` and set `APP_URL` / `NEXT_PUBLIC_API_URL` to `https://...`
 - [ ] Switch Keycloak from `start-dev` to `start` with proper hostname/TLS (edit `docker-compose.yml`)
-- [ ] Put TLS termination in front of nginx (Caddy, Traefik, or cloud load balancer)
 - [ ] Configure Keycloak realm `etl-dev` (or update `KC_DEV_REALM`)
 - [ ] Set up `KC_ADMIN_CLIENT_SECRET` for tenant provisioning API
 - [ ] Use pre-built images from a registry instead of local `build:` (future CI step)
@@ -155,6 +201,37 @@ docker compose --profile full up -d --build api
 
 # Reset database (destroys data)
 docker compose --profile full down -v
+```
+
+## Troubleshooting
+
+### `column pipeline_runs.parent_workflow_run_id does not exist` (500 on `/sync/runs`)
+
+New API code was deployed but the database schema was not migrated.
+
+**Fix (preferred)** — rebuild and recreate the API container (runs `alembic upgrade head` on start):
+
+```bash
+docker compose --profile full up -d --build api
+```
+
+Or run migrations inside the running API container:
+
+```bash
+docker exec elt-api alembic upgrade head
+```
+
+**Emergency SQL** (if Alembic cannot run):
+
+```bash
+docker exec -i elt-postgres psql -U elt -d elt_metadata < scripts/patch-2026-06-run-columns.sql
+docker exec elt-api alembic upgrade head
+```
+
+Then restart API and worker:
+
+```bash
+docker compose --profile full restart api worker
 ```
 
 ## Related repos

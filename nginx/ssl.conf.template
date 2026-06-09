@@ -1,29 +1,19 @@
-upstream frontend {
-    server frontend:3000;
-}
-
-upstream api {
-    server api:8000;
-}
-
 server {
-    listen 80;
+    listen 443 ssl;
+    http2 on;
     server_name _;
 
     client_max_body_size 50m;
 
-    # Let's Encrypt HTTP-01 challenge (certbot --webroot -w /var/www/letsencrypt)
-    location ^~ /.well-known/acme-challenge/ {
-        root /var/www/letsencrypt;
-        default_type "text/plain";
-        try_files $uri =404;
-    }
+    ssl_certificate     /etc/letsencrypt/live/current/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/current/privkey.pem;
+
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
 
     location /api/ {
-        if (-f /etc/letsencrypt/live/current/fullchain.pem) {
-            return 301 https://$host$request_uri;
-        }
-
         proxy_pass http://api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -33,19 +23,11 @@ server {
     }
 
     location /health {
-        if (-f /etc/letsencrypt/live/current/fullchain.pem) {
-            return 301 https://$host$request_uri;
-        }
-
         proxy_pass http://api/health;
         proxy_set_header Host $host;
     }
 
     location / {
-        if (-f /etc/letsencrypt/live/current/fullchain.pem) {
-            return 301 https://$host$request_uri;
-        }
-
         proxy_pass http://frontend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
