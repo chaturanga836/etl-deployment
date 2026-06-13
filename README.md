@@ -6,6 +6,7 @@ Orchestration repo for the full ELT Engine stack. This repo contains **no applic
 |------|------|
 | [etl-back](https://github.com/chaturanga836/etl-back) | FastAPI API + Celery worker |
 | [elt-frontend](https://github.com/chaturanga836/elt-frontend) | Next.js UI |
+| [platform-infra-repo](https://github.com/chaturanga836/platform-infra-repo) | BaaS infra service (workspace database provisioning) |
 | [trino-keyclock](https://github.com/chaturanga836/trino-keyclock) | Keycloak reference (service inlined here) |
 | **etl-deployment** (this repo) | Runtime bundle, compose templates, renderer |
 | [elt-installer](../elt-installer) | **Customer-facing setup wizard** (control plane) |
@@ -35,6 +36,7 @@ Operators and developers can still use compose directly (below).
 python/
   etl-back/
   elt-frontend/
+  platform-infra-repo/
   trino-keyclock/
   Ai-Agent-framework/   ← optional agent service
   etl-deployment/    ← you are here
@@ -105,6 +107,9 @@ Schema: [`schema/deployment.schema.json`](schema/deployment.schema.json)
 ```bash
 # Backend only
 docker compose --profile backend up -d --build
+
+# Infra-service only (rebuild after platform-infra-repo changes)
+docker compose --profile backend up -d --build infra-service
 
 # Full stack + Ollama (16 GB+ RAM recommended)
 docker compose --profile full --profile ollama up -d --build
