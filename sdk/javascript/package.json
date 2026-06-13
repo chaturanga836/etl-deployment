@@ -1,0 +1,16 @@
+{
+  "name": "@elt/sdk",
+  "version": "0.1.0",
+  "description": "HTTP client for the ELT Engine API (Studio, workspaces, auth)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": ["dist"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
