@@ -203,37 +203,6 @@ docker compose --profile full up -d --build api
 docker compose --profile full down -v
 ```
 
-## Troubleshooting
-
-### `column pipeline_runs.parent_workflow_run_id does not exist` (500 on `/sync/runs`)
-
-New API code was deployed but the database schema was not migrated.
-
-**Fix (preferred)** — rebuild and recreate the API container (runs `alembic upgrade head` on start):
-
-```bash
-docker compose --profile full up -d --build api
-```
-
-Or run migrations inside the running API container:
-
-```bash
-docker exec elt-api alembic upgrade head
-```
-
-**Emergency SQL** (if Alembic cannot run):
-
-```bash
-docker exec -i elt-postgres psql -U elt -d elt_metadata < scripts/patch-2026-06-run-columns.sql
-docker exec elt-api alembic upgrade head
-```
-
-Then restart API and worker:
-
-```bash
-docker compose --profile full restart api worker
-```
-
 ## Related repos
 
 - Backend: https://github.com/chaturanga836/etl-back

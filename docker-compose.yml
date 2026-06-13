@@ -57,6 +57,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: ${DATABASE_URL}
+      WORKSPACE_DATABASE_URL: ${WORKSPACE_DATABASE_URL:-postgresql://elt:changeme@postgres:5432/elt_workspace}
       REDIS_URL: redis://redis:6379/0
       KC_SERVER_URL: ${KC_SERVER_URL}
       KC_ISSUER: ${KC_ISSUER:-}
@@ -70,6 +71,8 @@ services:
       SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
       SCRAPER_SERVICE_URL: ${SCRAPER_SERVICE_URL:-http://scraper-service:8080}
       SCRAPER_INTERNAL_TOKEN: ${SCRAPER_INTERNAL_TOKEN:-}
+      PLATFORM_INFRA_URL: ${PLATFORM_INFRA_URL:-http://infra-service:9000}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}
     volumes:
       - backend_logs:/app/logs
     depends_on:
@@ -77,6 +80,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      infra-service:
+        condition: service_healthy
       scraper-service:
         condition: service_healthy
     healthcheck:
@@ -89,6 +94,34 @@ services:
       - "${API_PORT:-8000}:8000"
     networks:
       - elt-net
+
+  infra-service:
+    build:
+      context: ../platform-infra-repo
+      dockerfile: infra-service/Dockerfile
+    image: baas-infra:${IMAGE_TAG:-v1.0.0}
+    container_name: baas-infra-service
+    restart: unless-stopped
+    profiles: [full, backend]
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}
+      PROVISION_MODE: ${PROVISION_MODE:-docker}
+      DATA_PLANE_NETWORK: ${DATA_PLANE_NETWORK:-data-plane-net}
+      LOCAL_POSTGRES_URL: postgresql://${POSTGRES_USER:-elt}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/postgres
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - infra_instances:/app/data/instances
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    ports:
+      - "${INFRA_SERVICE_PORT:-9000}:9000"
+    networks:
+      - elt-net
+      - data-plane-net
 
   scraper-service:
     build:
@@ -289,8 +322,11 @@ services:
 networks:
   elt-net:
     driver: bridge
+  data-plane-net:
+    driver: bridge
 
 volumes:
   postgres_data:
   backend_logs:
   ollama_data:
+  infra_instances:
