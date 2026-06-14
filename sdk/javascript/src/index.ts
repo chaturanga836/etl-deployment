@@ -61,4 +61,85 @@ export class EltClient {
   }
 }
 
+export type EltRuntimeClientOptions = {
+  baseUrl: string;
+  apiKey: string;
+  workspaceId: number;
+};
+
+export class EltRuntimeClient {
+  private baseUrl: string;
+  private apiKey: string;
+  private workspaceId: number;
+
+  constructor(options: EltRuntimeClientOptions) {
+    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.apiKey = options.apiKey;
+    this.workspaceId = options.workspaceId;
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${this.apiKey}`,
+    };
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    url.searchParams.set("workspace_id", String(this.workspaceId));
+    const res = await fetch(url.toString(), {
+      method,
+      headers: this.headers(),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`ELT Runtime ${method} ${path} failed (${res.status}): ${text}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  }
+
+  runPipeline(pipelineUuid: string, input?: Record<string, unknown>) {
+    return this.request<{ run_id: number; status: string }>(
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/pipelines/${pipelineUuid}/run`,
+      { input: input ?? null },
+    );
+  }
+
+  runWorkflow(workflowUuid: string, input?: Record<string, unknown>) {
+    return this.request<{ run_id: number; status: string }>(
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/workflows/${workflowUuid}/run`,
+      { input: input ?? null },
+    );
+  }
+
+  invokeRest(
+    connectionId: number,
+    body?: {
+      path?: string;
+      method?: string;
+      variables?: Record<string, unknown>;
+      body?: Record<string, unknown>;
+    },
+  ) {
+    return this.request<{
+      status_code: number;
+      data: unknown;
+      headers?: Record<string, unknown>;
+    }>(
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/rest/${connectionId}/invoke`,
+      body ?? {},
+    );
+  }
+}
+
 export default EltClient;
