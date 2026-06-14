@@ -90,9 +90,7 @@ export class EltRuntimeClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    url.searchParams.set("workspace_id", String(this.workspaceId));
-    const res = await fetch(url.toString(), {
+    const res = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: this.headers(),
       body: body !== undefined ? JSON.stringify(body) : undefined,

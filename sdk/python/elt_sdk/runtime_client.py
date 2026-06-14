@@ -35,17 +35,14 @@ class EltRuntimeClient:
         path: str,
         *,
         json: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
     ) -> Any:
         url = f"{self._base_url}{path}"
-        query = {"workspace_id": self._workspace_id, **(params or {})}
         with httpx.Client(timeout=self._timeout) as client:
             response = client.request(
                 method,
                 url,
                 headers=self._headers(),
                 json=json,
-                params=query,
             )
         if response.status_code >= 400:
             raise EltClientError(response.text, response.status_code)
