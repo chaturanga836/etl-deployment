@@ -94,6 +94,7 @@ services:
       - "${API_PORT:-8000}:8000"
     networks:
       - elt-net
+      - data-plane-net
 
   infra-service:
     build:
