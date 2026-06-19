@@ -6,6 +6,5 @@ export { DatabaseContext } from "./database/database-context";
 export { TableModel, type FindManyOptions } from "./database/table-model";
 export * from "./types/database";
 export * from "./types/studio";
-
 import { EltClient } from "./elt-client";
 export default EltClient;
