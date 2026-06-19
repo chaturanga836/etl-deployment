@@ -1,3 +1,14 @@
+Metadata-Version: 2.4
+Name: elt-sdk
+Version: 0.1.0
+Summary: HTTP client for the ELT Engine API (Studio, workspaces, auth)
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: httpx>=0.28.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+
 # elt-sdk
 
 Python HTTP client for the ELT Engine API.

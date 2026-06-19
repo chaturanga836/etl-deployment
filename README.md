@@ -68,6 +68,7 @@ Package source: [`sdk/php/`](sdk/php/)
 | Variable | Description |
 |----------|-------------|
 | `ELT_API_URL` | Base URL of your deployed etl-back API (e.g. `https://api.example.com`) |
+| `ELT_ACCESS_TOKEN` | Keycloak JWT for CLI and scripts (`workspace_admin` for `db push`) |
 | Bearer token | Keycloak JWT from your auth flow — passed to the client constructor |
 
 ## SDK scope (v1)
@@ -77,8 +78,24 @@ Thin HTTP clients for public etl-back routes:
 - **Auth** — `POST /api/v1/auth/signup`
 - **Studio** — account, projects, service catalog
 - **Workspaces** — list workspaces
+- **Database migrations** — list/apply versioned SQL (`GET/POST .../databases/{id}/migrations`)
 
 Protected routes require a valid Keycloak bearer token.
+
+### Database migrations (CLI)
+
+Supabase-style workflow via [`cli/`](cli/):
+
+```bash
+pip install ./sdk/python ./cli
+export ELT_ACCESS_TOKEN="your-jwt"
+elt init
+elt link --api-url https://api.example.com --workspace 42 --database 1
+elt migration new create_users
+elt db push
+```
+
+See [`cli/README.md`](cli/README.md) for full documentation.
 
 ## Legacy orchestration files
 

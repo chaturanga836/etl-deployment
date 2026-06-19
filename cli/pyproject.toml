@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elt-cli"
+version = "0.1.0"
+description = "CLI for ELT Engine database migrations (Supabase-style workflow)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1.0",
+    "tomli-w>=1.0.0",
+    "httpx>=0.28.0",
+]
+license = { text = "MIT" }
+
+[project.scripts]
+elt = "elt_cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["elt_cli*"]
