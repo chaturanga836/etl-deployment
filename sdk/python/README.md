@@ -47,18 +47,19 @@ client.apply_database_migrations(
 )
 ```
 
-For local git-based workflows, use the [elt CLI](../cli/README.md):
+For local git-based workflows, use the [dtorch CLI](../cli/README.md):
 
 ```bash
 pip install ../cli
-elt init && elt link --api-url https://api.example.com --workspace 42 --database 1
-elt migration new create_users
-elt db push
+dtorch init && dtorch link --api-url https://api.example.com --workspace 42 --database 1
+dtorch migration new create_users
+dtorch db push
 ```
 
 ## Environment
 
 | Variable | Description |
 |----------|-------------|
-| `ELT_ACCESS_TOKEN` | Keycloak JWT (used by CLI; pass to SDK via `get_access_token`) |
-| `ELT_API_URL` | API base URL (CLI `elt link` writes this to `elt/config.toml`) |
+| `DTORCH_ACCESS_TOKEN` | Keycloak JWT (used by CLI; pass to SDK via `get_access_token`) |
+| `ELT_ACCESS_TOKEN` | Alias for `DTORCH_ACCESS_TOKEN` |
+| `DTORCH_API_URL` / `ELT_API_URL` | API base URL (CLI `dtorch link` writes this to `dtorch/config.toml`) |

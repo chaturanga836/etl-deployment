@@ -1,4 +1,4 @@
-"""Read and write elt/config.toml."""
+"""Read and write dtorch/config.toml."""
 
 from __future__ import annotations
 
@@ -12,25 +12,40 @@ except ImportError:
 
 import tomli_w
 
-DEFAULT_CONFIG_DIR = Path("elt")
+DEFAULT_CONFIG_DIR = Path("dtorch")
+LEGACY_CONFIG_DIR = Path("elt")
 DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.toml"
 DEFAULT_MIGRATIONS_DIR = DEFAULT_CONFIG_DIR / "migrations"
 
 
 def config_path(root: Optional[Path] = None) -> Path:
     base = root or Path.cwd()
-    return base / DEFAULT_CONFIG_FILE
+    preferred = base / DEFAULT_CONFIG_FILE
+    if preferred.is_file():
+        return preferred
+    legacy = base / LEGACY_CONFIG_DIR / "config.toml"
+    if legacy.is_file():
+        return legacy
+    return preferred
 
 
 def migrations_dir(root: Optional[Path] = None) -> Path:
     base = root or Path.cwd()
-    return base / DEFAULT_MIGRATIONS_DIR
+    preferred = base / DEFAULT_MIGRATIONS_DIR
+    if preferred.is_dir():
+        return preferred
+    legacy = base / LEGACY_CONFIG_DIR / "migrations"
+    if legacy.is_dir():
+        return legacy
+    return preferred
 
 
 def load_config(root: Optional[Path] = None) -> Dict[str, Any]:
     path = config_path(root)
     if not path.is_file():
-        raise FileNotFoundError(f"Config not found: {path}. Run `elt init` and `elt link` first.")
+        raise FileNotFoundError(
+            f"Config not found: {path}. Run `dtorch init` and `dtorch link` first."
+        )
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Invalid config format in {path}")
@@ -38,7 +53,8 @@ def load_config(root: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def save_config(data: Dict[str, Any], root: Optional[Path] = None) -> Path:
-    path = config_path(root)
+    base = root or Path.cwd()
+    path = base / DEFAULT_CONFIG_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(tomli_w.dumps(data))
     return path
@@ -47,7 +63,7 @@ def save_config(data: Dict[str, Any], root: Optional[Path] = None) -> Path:
 def require_link(data: Dict[str, Any]) -> tuple[str, int, int]:
     project = data.get("project")
     if not isinstance(project, dict):
-        raise ValueError("Missing [project] section in config.toml. Run `elt link`.")
+        raise ValueError("Missing [project] section in config.toml. Run `dtorch link`.")
     api_url = project.get("api_url")
     workspace_id = project.get("workspace_id")
     database_id = project.get("database_id")

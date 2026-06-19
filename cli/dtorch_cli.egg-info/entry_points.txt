@@ -1,0 +1,2 @@
+[console_scripts]
+dtorch = dtorch_cli.main:cli

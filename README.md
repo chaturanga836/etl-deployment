@@ -67,8 +67,9 @@ Package source: [`sdk/php/`](sdk/php/)
 
 | Variable | Description |
 |----------|-------------|
-| `ELT_API_URL` | Base URL of your deployed etl-back API (e.g. `https://api.example.com`) |
-| `ELT_ACCESS_TOKEN` | Keycloak JWT for CLI and scripts (`workspace_admin` for `db push`) |
+| `ELT_API_URL` / `DTORCH_API_URL` | Base URL of your deployed etl-back API (e.g. `https://api.example.com`) |
+| `DTORCH_ACCESS_TOKEN` | Keycloak JWT for CLI and scripts (`workspace_admin` for `db push`) |
+| `ELT_ACCESS_TOKEN` | Alias for `DTORCH_ACCESS_TOKEN` (legacy) |
 | Bearer token | Keycloak JWT from your auth flow — passed to the client constructor |
 
 ## SDK scope (v1)
@@ -88,11 +89,11 @@ Supabase-style workflow via [`cli/`](cli/):
 
 ```bash
 pip install ./sdk/python ./cli
-export ELT_ACCESS_TOKEN="your-jwt"
-elt init
-elt link --api-url https://api.example.com --workspace 42 --database 1
-elt migration new create_users
-elt db push
+export DTORCH_ACCESS_TOKEN="your-jwt"
+dtorch init
+dtorch link --api-url https://api.example.com --workspace 42 --database 1
+dtorch migration new create_users
+dtorch db push
 ```
 
 See [`cli/README.md`](cli/README.md) for full documentation.

@@ -24,7 +24,7 @@ import { EltClient } from '@elt/sdk';
 
 const client = new EltClient({
   baseUrl: process.env.ELT_API_URL!,
-  getAccessToken: async () => process.env.ELT_ACCESS_TOKEN!,
+  getAccessToken: async () => process.env.DTORCH_ACCESS_TOKEN!,
 });
 
 const project = await client.createProject({ name: 'My App' });
@@ -39,9 +39,9 @@ For customer apps and scripts that read/write workspace database tables:
 import { EltPlatformClient } from '@elt/sdk';
 
 const client = new EltPlatformClient({
-  baseUrl: process.env.ELT_API_URL!,
-  projectKey: process.env.ELT_PROJECT_KEY!,
-  projectSecret: process.env.ELT_PROJECT_SECRET!,
+  baseUrl: process.env.DTORCH_API_URL!,
+  projectKey: process.env.DTORCH_PROJECT_KEY!,
+  projectSecret: process.env.DTORCH_PROJECT_SECRET!,
   workspaceId: 42,
 });
 
@@ -98,7 +98,7 @@ Authorization: Bearer ps_...
 
 - The project secret is hashed server-side and returned in full only on create or regenerate.
 - Regenerating invalidates the previous secret immediately.
-- Project credentials can access database read/write APIs only (`db:read`, `db:write`). DDL, migrations, and provisioning require a user JWT with admin role.
+- Project credentials can access database read/write APIs only (`db:read`, `db:write`). DDL, migrations, and provisioning require a user JWT with admin role — use `dtorch db push` or `EltClient` with `DTORCH_ACCESS_TOKEN`.
 - Use environment variables or a secrets manager — never commit credentials.
 
 ## Errors

@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Allow running CLI when elt-sdk is installed from ../sdk/python (monorepo layout).
 _SDK_ROOT = Path(__file__).resolve().parents[2] / "sdk" / "python"
 if _SDK_ROOT.is_dir() and str(_SDK_ROOT) not in sys.path:
     sys.path.insert(0, str(_SDK_ROOT))
@@ -16,7 +15,7 @@ from elt_sdk import EltClient, EltClientError
 
 
 def get_access_token() -> Optional[str]:
-    return os.environ.get("ELT_ACCESS_TOKEN")
+    return os.environ.get("DTORCH_ACCESS_TOKEN") or os.environ.get("ELT_ACCESS_TOKEN")
 
 
 def make_client(api_url: str) -> EltClient:
