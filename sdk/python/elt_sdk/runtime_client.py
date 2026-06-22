@@ -93,3 +93,26 @@ class EltRuntimeClient:
                 "body": body,
             },
         )
+
+    def queue_push(
+        self,
+        queue_name: str,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Push a message onto a queue. Requires scope queue:push."""
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/queues/{queue_name}/push",
+            json={"payload": payload or {}},
+        )
+
+    def queue_pop(self, queue_name: str) -> Optional[Dict[str, Any]]:
+        """Pop the oldest message (destructive — message is removed). Requires scope queue:pop.
+
+        Returns None if the queue is empty.
+        """
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/queues/{queue_name}/pop",
+        )

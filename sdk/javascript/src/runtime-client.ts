@@ -61,4 +61,30 @@ export class EltRuntimeClient {
       body ?? {},
     );
   }
+
+  /** Push a message (requires `queue:push` scope). */
+  queuePush(queueName: string, payload?: Record<string, unknown>) {
+    return requestJson<{ id: number; payload: unknown; created_at?: string }>(
+      this.http,
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/push`,
+      { payload: payload ?? {} },
+    );
+  }
+
+  /** Pop oldest message — destructive; returns null when empty (requires `queue:pop` scope). */
+  async queuePop(queueName: string) {
+    const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/pop`;
+    try {
+      return await requestJson<{ id: number; payload: unknown; created_at?: string }>(
+        this.http,
+        "POST",
+        url,
+      );
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 204) return null;
+      throw err;
+    }
+  }
 }
