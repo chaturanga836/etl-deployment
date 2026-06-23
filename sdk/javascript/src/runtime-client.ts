@@ -87,4 +87,18 @@ export class EltRuntimeClient {
       throw err;
     }
   }
+
+  /** Publish realtime notification (requires `notification:publish` scope). */
+  notificationPublish(
+    channel: string,
+    payload?: Record<string, unknown>,
+    target?: Record<string, unknown>,
+  ) {
+    return requestJson<{ channel: string; recipient_count: number; published: boolean }>(
+      this.http,
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/notifications/publish`,
+      { channel, payload: payload ?? {}, ...(target ? { target } : {}) },
+    );
+  }
 }

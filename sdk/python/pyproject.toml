@@ -13,6 +13,7 @@ license = { text = "MIT" }
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+realtime = ["centrifuge-python>=0.3.2"]
 
 [tool.setuptools.packages.find]
 where = ["."]

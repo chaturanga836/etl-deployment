@@ -116,3 +116,20 @@ class EltRuntimeClient:
             "POST",
             f"/api/v1/runtime/workspaces/{self._workspace_id}/queues/{queue_name}/pop",
         )
+
+    def notification_publish(
+        self,
+        channel: str,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+        target: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Publish a realtime notification. Requires scope notification:publish."""
+        body: Dict[str, Any] = {"channel": channel, "payload": payload or {}}
+        if target is not None:
+            body["target"] = target
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/notifications/publish",
+            json=body,
+        )

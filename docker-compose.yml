@@ -156,7 +156,7 @@ services:
     container_name: elt-worker
     restart: unless-stopped
     profiles: [full, backend]
-    command: celery -A core.celery_app.celery_app worker --loglevel=info
+    command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
     env_file: .env
     environment:
       PYTHONUNBUFFERED: "1"
