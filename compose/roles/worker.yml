@@ -22,7 +22,7 @@ x-api-env: &api-env
 
 services:
   worker:
-    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    image: ${API_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-api:v1.0.0}
     restart: unless-stopped
     command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
     env_file: .env

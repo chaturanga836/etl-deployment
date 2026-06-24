@@ -4,7 +4,7 @@
 platform: "1.0.0"
 
 registry:
-  url: "registry.example.com/dt-orch"
+  url: "ghcr.io/YOUR_GITHUB_ORG"
 
 images:
   api: "dt-orch-api"

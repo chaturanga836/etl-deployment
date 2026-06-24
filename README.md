@@ -15,6 +15,8 @@ cp .env.platform.example .env
 
 Release manifest: [VERSION](VERSION)
 
+Image publishing: [docs/RELEASE.md](docs/RELEASE.md)
+
 ## SDK (app developers)
 
 Embed the DT Orch API in your application — no need to clone this repo for install.

@@ -43,7 +43,7 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str]:
 def _registry_lines(config: dict[str, Any]) -> list[str]:
     reg = config.get("registry", {})
     app = config.get("app", {})
-    url = reg.get("url", "registry.example.com/dt-orch")
+    url = reg.get("url", "ghcr.io/YOUR_GITHUB_ORG")
     tag = reg.get("image_tag") or app.get("image_tag", "v1.0.0")
     return [
         f"REGISTRY_URL={url}",
@@ -239,7 +239,7 @@ def render_helm_values(config: dict[str, Any]) -> dict[str, Any]:
     db_url, _, _ = _database_url(config)
     values: dict[str, Any] = {
         "global": {"imageTag": tag},
-        "registry": {"url": reg.get("url", "registry.example.com/dt-orch")},
+        "registry": {"url": reg.get("url", "ghcr.io/YOUR_GITHUB_ORG")},
         "api": {
             "env": {
                 "DATABASE_URL": db_url,

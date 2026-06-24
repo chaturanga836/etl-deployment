@@ -59,7 +59,7 @@ services:
       - elt-net
 
   api:
-    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    image: ${API_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-api:v1.0.0}
     container_name: dt-orch-api
     restart: unless-stopped
     profiles: [full, backend]
@@ -90,7 +90,7 @@ services:
       - data-plane-net
 
   infra-service:
-    image: ${INFRA_IMAGE:-registry.example.com/dt-orch/baas-infra:v1.0.0}
+    image: ${INFRA_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/baas-infra:v1.0.0}
     container_name: baas-infra-service
     restart: unless-stopped
     profiles: [full, backend]
@@ -115,7 +115,7 @@ services:
       - data-plane-net
 
   scraper-service:
-    image: ${SCRAPER_IMAGE:-registry.example.com/dt-orch/dt-orch-scraper:v1.0.0}
+    image: ${SCRAPER_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-scraper:v1.0.0}
     container_name: dt-orch-scraper
     restart: unless-stopped
     profiles: [full, backend]
@@ -135,7 +135,7 @@ services:
       - elt-net
 
   worker:
-    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    image: ${API_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-api:v1.0.0}
     container_name: dt-orch-worker
     restart: unless-stopped
     profiles: [full, backend]
@@ -198,7 +198,7 @@ services:
       - elt-net
 
   frontend:
-    image: ${FRONTEND_IMAGE:-registry.example.com/dt-orch/dt-orch-frontend:v1.0.0}
+    image: ${FRONTEND_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-frontend:v1.0.0}
     container_name: dt-orch-frontend
     restart: unless-stopped
     profiles: [full, frontend]

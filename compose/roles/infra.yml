@@ -4,7 +4,7 @@ name: dt-orch-role-infra
 
 services:
   infra-service:
-    image: ${INFRA_IMAGE:-registry.example.com/dt-orch/baas-infra:v1.0.0}
+    image: ${INFRA_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/baas-infra:v1.0.0}
     container_name: baas-infra-service
     restart: unless-stopped
     environment:

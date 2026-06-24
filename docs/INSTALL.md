@@ -81,9 +81,9 @@ python renderer/render.py --config schema/examples/distributed-aws-vm.json --out
 
 ## Release coordination
 
-1. Tag `vX.Y.Z` on `etl-back`, `elt-frontend`, `platform-infra-repo` → CI pushes images
-2. Update [VERSION](VERSION) and [charts/dt-orch/Chart.yaml](charts/dt-orch/Chart.yaml)
-3. Tag `etl-deployment` `vX.Y.Z`
+1. Tag `vX.Y.Z` on each app repo — GitHub Actions publishes images to GHCR (see [RELEASE.md](RELEASE.md))
+2. Update [VERSION](VERSION) `platform` and `registry.url` (`ghcr.io/<org>`)
+3. Tag `etl-deployment` `vX.Y.Z` (scraper image)
 
 ## Internal SaaS deploy
 

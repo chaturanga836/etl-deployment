@@ -2,7 +2,7 @@
   "version": "1",
   "mode": "monolith",
   "registry": {
-    "url": "registry.example.com/dt-orch",
+    "url": "ghcr.io/YOUR_GITHUB_ORG",
     "image_tag": "v1.0.0"
   },
   "database": {
