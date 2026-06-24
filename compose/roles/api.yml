@@ -3,7 +3,7 @@
 #   docker compose -f compose/networks.yml up -d
 #   docker compose -f compose/roles/api.yml --env-file .env up -d
 
-name: elt-role-api
+name: dt-orch-role-api
 
 x-api-env: &api-env
   PYTHONUNBUFFERED: "1"
@@ -30,8 +30,8 @@ x-api-env: &api-env
 
 services:
   api:
-    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
-    container_name: elt-api
+    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    container_name: dt-orch-api
     restart: unless-stopped
     env_file: .env
     environment:

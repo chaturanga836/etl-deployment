@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-worker
+  name: {{ include "dt-orch.fullname" . }}-worker
   labels:
     app.kubernetes.io/component: worker
 spec:
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+      app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
       app.kubernetes.io/component: worker
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+        app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
         app.kubernetes.io/component: worker
     spec:
       containers:
         - name: worker
-          image: {{ include "elt-platform.apiImage" . }}
+          image: {{ include "dt-orch.apiImage" . }}
           imagePullPolicy: IfNotPresent
           command:
             - celery
@@ -30,8 +30,8 @@ spec:
             - celery,notifications
           envFrom:
             - secretRef:
-                name: {{ include "elt-platform.fullname" . }}-secrets
+                name: {{ include "dt-orch.fullname" . }}-secrets
             - configMapRef:
-                name: {{ include "elt-platform.fullname" . }}-api-config
+                name: {{ include "dt-orch.fullname" . }}-api-config
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}

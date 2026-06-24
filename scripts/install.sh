@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ELT Platform installer — monolith, distributed roles, or config-driven render.
+# DT Orch installer — monolith, distributed roles, or config-driven render.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -78,7 +78,8 @@ generate_secrets_if_missing() {
   fi
 
   if [[ "${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}" == "changeme-internal-token" ]]; then
-    if [[ "${ELT_ENV:-development}" == "production" ]]; then
+    deploy_env="${DTORCH_ENV:-${ELT_ENV:-development}}"
+    if [[ "$deploy_env" == "production" ]]; then
       echo "ERROR: Set INTERNAL_SERVICE_TOKEN before production install."
       exit 1
     fi
@@ -107,7 +108,8 @@ production_guards() {
   source .env
   set +a
 
-  if [[ "${ELT_ENV:-development}" != "production" ]]; then
+  deploy_env="${DTORCH_ENV:-${ELT_ENV:-development}}"
+  if [[ "$deploy_env" != "production" ]]; then
     return 0
   fi
 
@@ -198,7 +200,7 @@ if [[ "$DEV_BUILD" == true ]]; then
   BUILD_ARGS=(--build)
 fi
 
-echo "Starting ELT Platform (profile: ${PROFILE})..."
+echo "Starting DT Orch (profile: ${PROFILE})..."
 # shellcheck disable=SC2086
 docker compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file .env up -d "${BUILD_ARGS[@]}"
 
@@ -227,7 +229,7 @@ done
 
 cat <<EOF
 
-ELT Platform is running (profile: ${PROFILE}).
+DT Orch is running (profile: ${PROFILE}).
 
   Stack URL:       ${APP_URL:-http://localhost}
   API (direct):    http://localhost:${API_PORT:-8000}

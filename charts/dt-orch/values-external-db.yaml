@@ -20,7 +20,7 @@ ingress:
   host: studio.example.com
   tls:
     enabled: true
-    secretName: elt-platform-tls
+    secretName: dt-orch-tls
 
 infra:
   enabled: true

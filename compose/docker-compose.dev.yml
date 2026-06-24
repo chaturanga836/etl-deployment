@@ -25,7 +25,7 @@ services:
     build:
       context: ../scraper-service
       dockerfile: Dockerfile
-    image: elt-scraper:${IMAGE_TAG:-v1.0.0}
+    image: dt-orch-scraper:${IMAGE_TAG:-v1.0.0}
 
   frontend:
     build:
@@ -37,4 +37,4 @@ services:
         NEXT_PUBLIC_KC_URL: ${NEXT_PUBLIC_KC_URL:-http://localhost:8081}
         NEXT_PUBLIC_KC_REALM: ${NEXT_PUBLIC_KC_REALM:-workspace-realm}
         NEXT_PUBLIC_KC_CLIENT_ID: ${NEXT_PUBLIC_KC_CLIENT_ID:-workspace-web}
-    image: elt-frontend:${IMAGE_TAG:-v1.0.0}
+    image: dt-orch-frontend:${IMAGE_TAG:-v1.0.0}

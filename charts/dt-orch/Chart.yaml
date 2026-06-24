@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dt-orch
+description: Self-hosted DT Orch BaaS (API, worker, frontend, infra-service)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

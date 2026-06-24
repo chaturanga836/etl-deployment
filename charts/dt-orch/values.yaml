@@ -1,9 +1,9 @@
-# Default values for elt-platform.
+# Default values for dt-orch.
 # Override for production: external RDS, ElastiCache, Keycloak, ingress host.
 
 global:
   imageTag: "v1.0.0"
-  registry: "registry.example.com/elt"
+  registry: "registry.example.com/dt-orch"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -11,7 +11,7 @@ fullnameOverride: ""
 api:
   replicaCount: 2
   image:
-    repository: elt-api
+    repository: dt-orch-api
   port: 8000
   resources: {}
   env:
@@ -24,7 +24,7 @@ api:
 worker:
   replicaCount: 1
   image:
-    repository: elt-api
+    repository: dt-orch-api
   resources:
     limits:
       memory: 1Gi
@@ -33,7 +33,7 @@ worker:
 frontend:
   replicaCount: 1
   image:
-    repository: elt-frontend
+    repository: dt-orch-frontend
   port: 3000
   build:
     nextPublicApiUrl: "https://studio.example.com/api/v1"
@@ -57,7 +57,7 @@ ingress:
   host: studio.example.com
   tls:
     enabled: false
-    secretName: elt-platform-tls
+    secretName: dt-orch-tls
 
 database:
   # Full connection string to metadata Postgres (RDS, Cloud SQL, etc.)
@@ -80,7 +80,7 @@ secrets:
   kcAdminClientSecret: ""
 
 platformInfra:
-  url: "http://elt-platform-infra:9000"
+  url: "http://dt-orch-infra:9000"
 
 scraper:
   enabled: false

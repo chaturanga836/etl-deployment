@@ -1,6 +1,6 @@
-# ELT Deployment
+# DT Orch — deployment & SDK
 
-Official **self-host install** package and **customer SDK** for the ELT Platform.
+Official **self-host install** package and **customer SDK** for **DT Orch** (self-hosted BaaS).
 
 ## Platform install (ops / self-host)
 
@@ -17,7 +17,7 @@ Release manifest: [VERSION](VERSION)
 
 ## SDK (app developers)
 
-Embed the ELT API in your application — no need to clone this repo for install.
+Embed the DT Orch API in your application — no need to clone this repo for install.
 
 ### Node / React / Angular
 
@@ -69,7 +69,7 @@ See [`cli/README.md`](cli/README.md).
 
 | Directory | Audience |
 |-----------|----------|
-| `compose/`, `charts/`, `terraform/`, `schema/`, `scripts/` | Platform install |
+| `compose/`, `charts/`, `terraform/`, `schema/`, `scripts/` | DT Orch platform install |
 | `sdk/`, `cli/` | Application developers |
 
 ## Application source repos
@@ -78,7 +78,7 @@ See [`cli/README.md`](cli/README.md).
 |------|------|
 | [etl-back](https://github.com/chaturanga836/etl-back) | API + Celery worker image |
 | [elt-frontend](https://github.com/chaturanga836/elt-frontend) | Next.js UI image |
-| [platform-infra-repo](https://github.com/chaturanga836/platform-infra-repo) | Infra provisioning service image |
+| [platform-infra-repo](https://github.com/chaturanga836/platform-infra-repo) | BaaS infra provisioning service image |
 
 ## License
 

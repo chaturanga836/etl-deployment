@@ -1,10 +1,10 @@
-# Monolith stack — single VM PoC / small self-host.
+# Monolith stack — DT Orch single VM PoC / small self-host.
 # Customer:  scripts/install.sh monolith
 # Dev build:  docker compose -f compose/monolith.yml -f compose/docker-compose.dev.yml up -d --build
 #
 # Profiles: full | backend | frontend | auth | ollama | agent
 
-name: elt-engine
+name: dt-orch
 
 x-api-env: &api-env
   PYTHONUNBUFFERED: "1"
@@ -59,8 +59,8 @@ services:
       - elt-net
 
   api:
-    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
-    container_name: elt-api
+    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    container_name: dt-orch-api
     restart: unless-stopped
     profiles: [full, backend]
     env_file: .env
@@ -90,7 +90,7 @@ services:
       - data-plane-net
 
   infra-service:
-    image: ${INFRA_IMAGE:-registry.example.com/elt/baas-infra:v1.0.0}
+    image: ${INFRA_IMAGE:-registry.example.com/dt-orch/baas-infra:v1.0.0}
     container_name: baas-infra-service
     restart: unless-stopped
     profiles: [full, backend]
@@ -115,8 +115,8 @@ services:
       - data-plane-net
 
   scraper-service:
-    image: ${SCRAPER_IMAGE:-registry.example.com/elt/elt-scraper:v1.0.0}
-    container_name: elt-scraper
+    image: ${SCRAPER_IMAGE:-registry.example.com/dt-orch/dt-orch-scraper:v1.0.0}
+    container_name: dt-orch-scraper
     restart: unless-stopped
     profiles: [full, backend]
     environment:
@@ -135,8 +135,8 @@ services:
       - elt-net
 
   worker:
-    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
-    container_name: elt-worker
+    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
+    container_name: dt-orch-worker
     restart: unless-stopped
     profiles: [full, backend]
     command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
@@ -198,8 +198,8 @@ services:
       - elt-net
 
   frontend:
-    image: ${FRONTEND_IMAGE:-registry.example.com/elt/elt-frontend:v1.0.0}
-    container_name: elt-frontend
+    image: ${FRONTEND_IMAGE:-registry.example.com/dt-orch/dt-orch-frontend:v1.0.0}
+    container_name: dt-orch-frontend
     restart: unless-stopped
     profiles: [full, frontend]
     environment:

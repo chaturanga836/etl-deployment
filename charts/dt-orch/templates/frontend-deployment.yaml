@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-frontend
+  name: {{ include "dt-orch.fullname" . }}-frontend
   labels:
     app.kubernetes.io/component: frontend
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+      app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
       app.kubernetes.io/component: frontend
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+        app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
         app.kubernetes.io/component: frontend
     spec:
       containers:
         - name: frontend
-          image: {{ include "elt-platform.frontendImage" . }}
+          image: {{ include "dt-orch.frontendImage" . }}
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.frontend.port }}
@@ -31,10 +31,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-frontend
+  name: {{ include "dt-orch.fullname" . }}-frontend
 spec:
   selector:
-    app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+    app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
     app.kubernetes.io/component: frontend
   ports:
     - port: {{ .Values.frontend.port }}

@@ -1,5 +1,5 @@
 aws_region         = "us-east-1"
-cluster_name       = "elt-platform"
+cluster_name       = "dt-orch"
 db_username        = "elt_admin"
 db_password        = "CHANGE_ME"
-helm_release_name  = "elt-platform"
+helm_release_name  = "dt-orch"

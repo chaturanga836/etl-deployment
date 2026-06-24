@@ -43,15 +43,15 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str]:
 def _registry_lines(config: dict[str, Any]) -> list[str]:
     reg = config.get("registry", {})
     app = config.get("app", {})
-    url = reg.get("url", "registry.example.com/elt")
+    url = reg.get("url", "registry.example.com/dt-orch")
     tag = reg.get("image_tag") or app.get("image_tag", "v1.0.0")
     return [
         f"REGISTRY_URL={url}",
         f"IMAGE_TAG={tag}",
-        f"API_IMAGE={url}/elt-api:{tag}",
-        f"FRONTEND_IMAGE={url}/elt-frontend:{tag}",
+        f"API_IMAGE={url}/dt-orch-api:{tag}",
+        f"FRONTEND_IMAGE={url}/dt-orch-frontend:{tag}",
         f"INFRA_IMAGE={url}/baas-infra:{tag}",
-        f"SCRAPER_IMAGE={url}/elt-scraper:{tag}",
+        f"SCRAPER_IMAGE={url}/dt-orch-scraper:{tag}",
         "",
     ]
 
@@ -157,7 +157,7 @@ def render_env(config: dict[str, Any]) -> str:
         f"REDIS_URL={_redis_url(config)}",
         f"SANDBOX_ENABLED={'true' if app.get('sandbox_enabled', True) else 'false'}",
         "",
-        f"APP_NAME={app.get('name', 'ELT Engine')}",
+        f"APP_NAME={app.get('name', 'DT Orch')}",
         "DEBUG=false",
         "",
     ])
@@ -239,7 +239,7 @@ def render_helm_values(config: dict[str, Any]) -> dict[str, Any]:
     db_url, _, _ = _database_url(config)
     values: dict[str, Any] = {
         "global": {"imageTag": tag},
-        "registry": {"url": reg.get("url", "registry.example.com/elt")},
+        "registry": {"url": reg.get("url", "registry.example.com/dt-orch")},
         "api": {
             "env": {
                 "DATABASE_URL": db_url,

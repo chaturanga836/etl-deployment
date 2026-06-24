@@ -2,24 +2,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-infra
+  name: {{ include "dt-orch.fullname" . }}-infra
   labels:
     app.kubernetes.io/component: infra
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+      app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
       app.kubernetes.io/component: infra
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+        app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
         app.kubernetes.io/component: infra
     spec:
       containers:
         - name: infra
-          image: {{ include "elt-platform.infraImage" . }}
+          image: {{ include "dt-orch.infraImage" . }}
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.infra.port }}
@@ -27,7 +27,7 @@ spec:
             - name: INTERNAL_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "elt-platform.fullname" . }}-secrets
+                  name: {{ include "dt-orch.fullname" . }}-secrets
                   key: INTERNAL_SERVICE_TOKEN
             - name: PROVISION_MODE
               value: {{ .Values.infra.provisionMode | quote }}
@@ -57,10 +57,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-infra
+  name: {{ include "dt-orch.fullname" . }}-infra
 spec:
   selector:
-    app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+    app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
     app.kubernetes.io/component: infra
   ports:
     - port: {{ .Values.infra.port }}

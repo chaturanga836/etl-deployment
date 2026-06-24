@@ -31,7 +31,7 @@ variable "aws_region" {
 
 variable "cluster_name" {
   type    = string
-  default = "elt-platform"
+  default = "dt-orch"
 }
 
 variable "db_username" {
@@ -46,12 +46,12 @@ variable "db_password" {
 
 variable "helm_release_name" {
   type    = string
-  default = "elt-platform"
+  default = "dt-orch"
 }
 
 variable "helm_chart_path" {
   type    = string
-  default = "../../../charts/elt-platform"
+  default = "../../../charts/dt-orch"
 }
 
 # --- Placeholder outputs for Helm wiring ---

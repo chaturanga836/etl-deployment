@@ -2,9 +2,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "elt-platform.fullname" . }}-migrate
+  name: {{ include "dt-orch.fullname" . }}-migrate
   labels:
-    app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+    app.kubernetes.io/name: {{ include "dt-orch.fullname" . }}
     app.kubernetes.io/component: migrate
   annotations:
     helm.sh/hook: pre-upgrade,pre-install
@@ -16,11 +16,11 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: {{ include "elt-platform.apiImage" . }}
+          image: {{ include "dt-orch.apiImage" . }}
           command: ["alembic", "upgrade", "head"]
           envFrom:
             - secretRef:
-                name: {{ include "elt-platform.fullname" . }}-secrets
+                name: {{ include "dt-orch.fullname" . }}-secrets
             - configMapRef:
-                name: {{ include "elt-platform.fullname" . }}-api-config
+                name: {{ include "dt-orch.fullname" . }}-api-config
 {{- end }}

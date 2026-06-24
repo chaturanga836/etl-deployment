@@ -1,6 +1,6 @@
 # Celery worker role — scale with: docker compose -f compose/roles/worker.yml up -d --scale worker=3
 
-name: elt-role-worker
+name: dt-orch-role-worker
 
 x-api-env: &api-env
   PYTHONUNBUFFERED: "1"
@@ -22,7 +22,7 @@ x-api-env: &api-env
 
 services:
   worker:
-    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
+    image: ${API_IMAGE:-registry.example.com/dt-orch/dt-orch-api:v1.0.0}
     restart: unless-stopped
     command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
     env_file: .env

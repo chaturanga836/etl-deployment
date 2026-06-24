@@ -2,7 +2,7 @@
   "version": "1",
   "mode": "distributed",
   "registry": {
-    "url": "registry.example.com/elt",
+    "url": "registry.example.com/dt-orch",
     "image_tag": "v1.0.0"
   },
   "database": {
@@ -40,7 +40,7 @@
     "admin_client_secret": ""
   },
   "app": {
-    "name": "ELT Engine",
+    "name": "DT Orch",
     "image_tag": "v1.0.0",
     "sandbox_enabled": true
   }

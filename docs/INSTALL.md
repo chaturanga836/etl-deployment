@@ -1,12 +1,12 @@
-# ELT Platform — Self-Host Install Guide
+# DT Orch BaaS — self-host install guide
 
-This repo is the **official install surface** for licensed self-host deployments. Application source lives in separate repos; this repo pins image versions and provides Compose, Helm, and Terraform (skeleton).
+This repo is the **official install surface** for **DT Orch** (self-hosted BaaS). Application source lives in separate repos; this repo pins image versions and provides Compose, Helm, and Terraform (skeleton).
 
 | Path | Purpose |
 |------|---------|
 | [compose/monolith.yml](compose/monolith.yml) | Single-VM full stack |
 | [compose/roles/](compose/roles/) | Distributed multi-VM roles |
-| [charts/elt-platform/](charts/elt-platform/) | Kubernetes Helm chart |
+| [charts/dt-orch/](charts/dt-orch/) | Kubernetes Helm chart |
 | [schema/](schema/) | Deployment JSON schema + examples |
 | [renderer/render.py](renderer/render.py) | Generate `.env` from JSON |
 | [sdk/](sdk/) | Customer app SDKs (separate audience) |
@@ -55,11 +55,11 @@ docker compose -f compose/networks.yml up -d   # once
 ## Kubernetes (Helm)
 
 ```bash
-helm install elt-platform ./charts/elt-platform \
-  -f charts/elt-platform/values.yaml \
-  -f charts/elt-platform/values-external-db.yaml \
+helm install dt-orch ./charts/dt-orch \
+  -f charts/dt-orch/values.yaml \
+  -f charts/dt-orch/values-external-db.yaml \
   --set global.imageTag=v1.0.0 \
-  --set global.registry=registry.example.com/elt \
+  --set global.registry=registry.example.com/dt-orch \
   --set secrets.internalServiceToken="$(openssl rand -hex 32)" \
   --set secrets.fernetKey="$(openssl rand -base64 32)" \
   --set database.url="postgresql://..."
@@ -68,8 +68,8 @@ helm install elt-platform ./charts/elt-platform \
 Generate Helm values from deployment JSON:
 
 ```bash
-python renderer/render.py --config schema/examples/distributed-aws-vm.json --out /tmp/elt --helm-values
-# Use /tmp/elt/helm-values.json to override chart values
+python renderer/render.py --config schema/examples/distributed-aws-vm.json --out /tmp/dtorch --helm-values
+# Use /tmp/dtorch/helm-values.json to override chart values
 ```
 
 ## Upgrade
@@ -82,7 +82,7 @@ python renderer/render.py --config schema/examples/distributed-aws-vm.json --out
 ## Release coordination
 
 1. Tag `vX.Y.Z` on `etl-back`, `elt-frontend`, `platform-infra-repo` → CI pushes images
-2. Update [VERSION](VERSION) and [charts/elt-platform/Chart.yaml](charts/elt-platform/Chart.yaml)
+2. Update [VERSION](VERSION) and [charts/dt-orch/Chart.yaml](charts/dt-orch/Chart.yaml)
 3. Tag `etl-deployment` `vX.Y.Z`
 
 ## Internal SaaS deploy

@@ -2,7 +2,7 @@
 {{- if .Values.ingress.enabled }}
   https://{{ .Values.ingress.host }}/
 {{- else }}
-  kubectl port-forward svc/{{ include "elt-platform.fullname" . }}-frontend 3000:{{ .Values.frontend.port }}
+  kubectl port-forward svc/{{ include "dt-orch.fullname" . }}-frontend 3000:{{ .Values.frontend.port }}
 {{- end }}
 
 2. API health:
