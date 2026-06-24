@@ -1,0 +1,48 @@
+{
+  "realm": "workspace-realm",
+  "enabled": true,
+  "displayName": "DT Orch Workspace",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "super_admin",
+        "description": "Platform super administrator",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "user",
+        "description": "Standard user",
+        "composite": false,
+        "clientRole": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "workspace-web",
+      "name": "Workspace Web",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "workspace-api",
+      "name": "Workspace API",
+      "enabled": true,
+      "publicClient": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "secret": "changeme-api-secret",
+      "protocol": "openid-connect"
+    }
+  ]
+}
