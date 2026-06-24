@@ -1,5 +1,1 @@
-.env
-.env.local
-data/
-generated/
-*.log
+config/license-private.pem

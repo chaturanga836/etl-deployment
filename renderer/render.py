@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,11 +21,13 @@ def _public_base_url(host: str, port: int, use_proxy: bool) -> str:
     return f"http://{host}:{port}"
 
 
-def _database_url(config: dict[str, Any]) -> tuple[str, str, str]:
+def _database_url(config: dict[str, Any]) -> tuple[str, str, str, str, str]:
     db = config["database"]
     user = db["user"]
     password = quote_plus(db["password"])
-    elt_db = db.get("elt_db_name", "elt_metadata")
+    # Legacy JSON key elt_db_name → metadata_db_name
+    metadata_db = db.get("metadata_db_name") or db.get("elt_db_name", "dtorc_metadata")
+    workspace_db = db.get("workspace_db_name", "dtorc_workspace")
 
     if db["source"] == "bundled":
         host = "postgres"
@@ -33,10 +36,13 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str]:
         host = db["host"]
         port = db.get("port", 5432)
 
+    base = f"postgresql://{user}:{password}@{host}:{port}"
     return (
-        f"postgresql://{user}:{password}@{host}:{port}/{elt_db}",
+        f"{base}/{metadata_db}",
+        f"{base}/{workspace_db}",
         user,
         db["password"],
+        metadata_db,
     )
 
 
@@ -79,7 +85,7 @@ def render_env(config: dict[str, Any]) -> str:
     db = config["database"]
     kc = config["keycloak"]
     app = config.get("app", {})
-    database_url, pg_user, pg_password = _database_url(config)
+    database_url, workspace_database_url, pg_user, pg_password, metadata_db = _database_url(config)
     realm = kc["realm"]
 
     lines: list[str] = [
@@ -118,6 +124,19 @@ def render_env(config: dict[str, Any]) -> str:
             f"FRONTEND_URL={app_url}",
             "",
         ])
+    elif mode == "kubernetes":
+        k8s = config.get("kubernetes", {})
+        host = k8s.get("ingress_host", "localhost")
+        app_url = f"https://{host}"
+        lines.extend([
+            f"APP_URL={app_url}",
+            f"NEXT_PUBLIC_API_URL={app_url}/api/v1",
+            f"NEXT_PUBLIC_KC_URL={app_url}",
+            f"NEXT_PUBLIC_KC_REALM={realm}",
+            f"NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
+            f"FRONTEND_URL={app_url}",
+            "",
+        ])
     else:
         dist = config["distributed"]
         services = dist.get("services", {})
@@ -150,10 +169,12 @@ def render_env(config: dict[str, Any]) -> str:
         f"POSTGRES_USER={pg_user}",
         f"POSTGRES_PASSWORD={pg_password}",
         "POSTGRES_DB=postgres",
-        f"ELT_DB_NAME={db.get('elt_db_name', 'elt_metadata')}",
+        f"DTORC_METADATA_DB_NAME={metadata_db}",
+        f"DTORC_WORKSPACE_DB_NAME={db.get('workspace_db_name', 'dtorc_workspace')}",
         f"KEYCLOAK_DB_NAME={db.get('keycloak_db_name', 'keycloak')}",
         "",
         f"DATABASE_URL={database_url}",
+        f"WORKSPACE_DATABASE_URL={workspace_database_url}",
         f"REDIS_URL={_redis_url(config)}",
         f"SANDBOX_ENABLED={'true' if app.get('sandbox_enabled', True) else 'false'}",
         "",
@@ -172,6 +193,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"KC_ADMIN_PASSWORD={kc['admin_password']}",
             "KC_SERVER_URL=http://keycloak:8080",
             f"KC_DEV_REALM={realm}",
+            f"KC_REALM={realm}",
             f"KEYCLOAK_TOKEN_URL=http://keycloak:8080/realms/{realm}/protocol/openid-connect/token",
             f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'admin-cli')}",
             f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', '')}",
@@ -184,16 +206,34 @@ def render_env(config: dict[str, Any]) -> str:
             f"KC_ADMIN_USER={kc['admin_user']}",
             f"KC_ADMIN_PASSWORD={kc['admin_password']}",
             f"KC_DEV_REALM={realm}",
+            f"KC_REALM={realm}",
             f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'admin-cli')}",
             f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', '')}",
         ])
+
+    license_key = config.get("license", {}).get("key", "")
+    bootstrap_token = secrets.token_hex(32)
+    superadmin = config.get("superadmin", {})
+    super_email = superadmin.get("email") or f"{superadmin.get('username', 'admin')}@users.local"
+
+    lines.extend([
+        f"LICENSE_KEY={license_key}",
+        "DTORCH_SETUP_COMPLETE=false",
+        f"INSTALL_BOOTSTRAP_TOKEN={bootstrap_token}",
+        f"SUPERADMIN_USERNAME={superadmin.get('username', '')}",
+        f"SUPERADMIN_EMAIL={super_email}",
+        "",
+    ])
 
     return "\n".join(lines) + "\n"
 
 
 def _role_manifest(config: dict[str, Any]) -> list[dict[str, Any]]:
-    if config["mode"] == "monolith":
+    mode = config["mode"]
+    if mode == "monolith":
         return [{"name": "monolith", "compose_file": "compose/monolith.yml", "profile": "full"}]
+    if mode == "kubernetes":
+        return [{"name": "kubernetes", "chart": "charts/dt-orch"}]
 
     services = config.get("distributed", {}).get("services", {})
     roles: list[dict[str, Any]] = []
@@ -220,11 +260,13 @@ def _role_manifest(config: dict[str, Any]) -> list[dict[str, Any]]:
 
 def render_manifest(config: dict[str, Any]) -> dict[str, Any]:
     """Deployment manifest consumed by install.sh."""
+    mode = config["mode"]
+    profile = "full" if mode == "monolith" else ("kubernetes" if mode == "kubernetes" else "distributed")
     return {
         "version": config["version"],
         "platform_version": config.get("app", {}).get("image_tag", "v1.0.0"),
-        "mode": config["mode"],
-        "compose_profile": "full" if config["mode"] == "monolith" else "distributed",
+        "mode": mode,
+        "compose_profile": profile,
         "database_source": config["database"]["source"],
         "roles": _role_manifest(config),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -236,16 +278,41 @@ def render_helm_values(config: dict[str, Any]) -> dict[str, Any]:
     reg = config.get("registry", {})
     app = config.get("app", {})
     tag = reg.get("image_tag") or app.get("image_tag", "v1.0.0")
-    db_url, _, _ = _database_url(config)
+    db_url, workspace_db_url, _, _, _ = _database_url(config)
+    k8s = config.get("kubernetes", {})
+    ingress_host = k8s.get("ingress_host", "studio.example.com")
+    license_key = config.get("license", {}).get("key", "")
     values: dict[str, Any] = {
         "global": {"imageTag": tag},
         "registry": {"url": reg.get("url", "ghcr.io/YOUR_GITHUB_ORG")},
+        "ingress": {
+            "enabled": True,
+            "host": ingress_host,
+        },
+        "database": {
+            "url": db_url,
+            "workspaceUrl": workspace_database_url,
+        },
+        "redis": {"url": _redis_url(config)},
+        "secrets": {
+            "licenseKey": license_key,
+        },
+        "frontend": {
+            "build": {
+                "nextPublicApiUrl": f"https://{ingress_host}/api/v1",
+                "nextPublicKcUrl": f"https://{ingress_host}",
+                "nextPublicKcRealm": config["keycloak"]["realm"],
+                "nextPublicKcClientId": "workspace-web",
+            }
+        },
         "api": {
             "env": {
                 "DATABASE_URL": db_url,
+                "WORKSPACE_DATABASE_URL": workspace_database_url,
                 "REDIS_URL": _redis_url(config),
                 "PLATFORM_INFRA_URL": _platform_infra_url(config),
                 "SANDBOX_ENABLED": str(app.get("sandbox_enabled", True)).lower(),
+                "LICENSE_KEY": license_key,
             }
         },
     }

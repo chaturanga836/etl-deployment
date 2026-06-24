@@ -67,7 +67,7 @@ output "next_steps" {
       - helm_release using var.helm_chart_path
 
     Pass to Helm values:
-      database.url = postgresql://...@rds-endpoint:5432/elt_metadata
+      database.url = postgresql://...@rds-endpoint:5432/dtorc_metadata
       redis.url      = redis://elasticache-endpoint:6379/0
   EOT
 }

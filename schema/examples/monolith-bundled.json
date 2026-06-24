@@ -9,7 +9,8 @@
     "source": "bundled",
     "user": "elt",
     "password": "changeme",
-    "elt_db_name": "elt_metadata",
+    "metadata_db_name": "dtorc_metadata",
+    "workspace_db_name": "dtorc_workspace",
     "keycloak_db_name": "keycloak"
   },
   "monolith": {
@@ -33,5 +34,13 @@
     "name": "DT Orch",
     "image_tag": "v1.0.0",
     "sandbox_enabled": true
+  },
+  "superadmin": {
+    "username": "admin",
+    "password": "ChangeMe123!",
+    "email": "admin@example.com"
+  },
+  "license": {
+    "key": "REPLACE_WITH_SIGNED_LICENSE"
   }
 }

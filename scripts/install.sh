@@ -10,6 +10,7 @@ CONFIG=""
 ROLE=""
 DEV_BUILD=false
 SCALE=""
+STATE_DIR="${STATE_DIR:-}"
 
 usage() {
   cat <<'EOF'
@@ -23,6 +24,7 @@ Profiles (monolith):
 
 Options:
   --config PATH     Render .env + manifest.json from deployment JSON, then exit unless profile/role set
+  --state-dir PATH  Use .env and secrets from this directory (installer wizard)
   --role NAME       Distributed role: api | worker | frontend | infra
   --dev             Use compose/docker-compose.dev.yml (build from sibling repos)
   --scale N         Worker replicas (with --role worker)
@@ -39,6 +41,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config) CONFIG="$2"; shift 2 ;;
+    --state-dir) STATE_DIR="$2"; shift 2 ;;
     --role) ROLE="$2"; shift 2 ;;
     --dev) DEV_BUILD=true; shift ;;
     --scale) SCALE="$2"; shift 2 ;;
@@ -51,7 +54,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 ensure_env() {
-  if [[ ! -f .env ]]; then
+  local env_file=".env"
+  if [[ -n "$STATE_DIR" && -f "${STATE_DIR}/.env" ]]; then
+    env_file="${STATE_DIR}/.env"
+  fi
+  if [[ ! -f "$env_file" ]]; then
     if [[ -f .env.platform.example ]]; then
       cp .env.platform.example .env
       echo "Created .env from .env.platform.example"
@@ -60,19 +67,32 @@ ensure_env() {
       exit 1
     fi
   fi
+  ENV_FILE="${ENV_FILE:-$env_file}"
+}
+
+env_file_path() {
+  if [[ -n "${ENV_FILE:-}" ]]; then
+    echo "$ENV_FILE"
+  elif [[ -n "$STATE_DIR" && -f "${STATE_DIR}/.env" ]]; then
+    echo "${STATE_DIR}/.env"
+  else
+    echo ".env"
+  fi
 }
 
 generate_secrets_if_missing() {
+  local ef
+  ef="$(env_file_path)"
   # shellcheck disable=SC1091
   set -a
-  source .env
+  source "$ef"
   set +a
 
   local updated=false
 
   if [[ -z "${FERNET_KEY:-}" ]]; then
     FERNET_KEY="$(openssl rand -base64 32)"
-    echo "FERNET_KEY=${FERNET_KEY}" >> .env
+    echo "FERNET_KEY=${FERNET_KEY}" >> "$ef"
     updated=true
     echo "Generated FERNET_KEY"
   fi
@@ -84,11 +104,11 @@ generate_secrets_if_missing() {
       exit 1
     fi
     INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)"
-    if grep -q '^INTERNAL_SERVICE_TOKEN=' .env; then
-      sed -i.bak "s/^INTERNAL_SERVICE_TOKEN=.*/INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}/" .env
+    if grep -q '^INTERNAL_SERVICE_TOKEN=' "$ef"; then
+      sed -i.bak "s/^INTERNAL_SERVICE_TOKEN=.*/INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}/" "$ef"
       rm -f .env.bak
     else
-      echo "INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}" >> .env
+      echo "INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}" >> "$ef"
     fi
     updated=true
     echo "Generated INTERNAL_SERVICE_TOKEN (development)"
@@ -97,15 +117,17 @@ generate_secrets_if_missing() {
   if [[ "$updated" == true ]]; then
   # shellcheck disable=SC1091
     set -a
-    source .env
+    source "$ef"
     set +a
   fi
 }
 
 production_guards() {
+  local ef
+  ef="$(env_file_path)"
   # shellcheck disable=SC1091
   set -a
-  source .env
+  source "$ef"
   set +a
 
   deploy_env="${DTORCH_ENV:-${ELT_ENV:-development}}"
@@ -125,7 +147,11 @@ production_guards() {
 }
 
 render_config() {
-  python3 "${ROOT_DIR}/renderer/render.py" --config "$CONFIG" --out "$ROOT_DIR" --helm-values
+  local out_dir="$ROOT_DIR"
+  if [[ -n "$STATE_DIR" ]]; then
+    out_dir="$STATE_DIR"
+  fi
+  python3 "${ROOT_DIR}/renderer/render.py" --config "$CONFIG" --out "$out_dir" --helm-values
   echo "Rendered .env and manifest.json from ${CONFIG}"
 }
 
@@ -156,9 +182,10 @@ ensure_env
 generate_secrets_if_missing
 production_guards
 
+EF="$(env_file_path)"
 # shellcheck disable=SC1091
 set -a
-source .env
+source "$EF"
 set +a
 
 if [[ -n "$ROLE" ]]; then
@@ -178,7 +205,7 @@ if [[ -n "$ROLE" ]]; then
 
   echo "Starting role: ${ROLE}..."
   # shellcheck disable=SC2086
-  docker compose "${COMPOSE_ARGS[@]}" --env-file .env up -d "${BUILD_ARGS[@]}" "${SCALE_ARGS[@]}"
+  docker compose "${COMPOSE_ARGS[@]}" --env-file "$EF" up -d "${BUILD_ARGS[@]}" "${SCALE_ARGS[@]}"
   echo "Role ${ROLE} started."
   exit 0
 fi
@@ -202,7 +229,7 @@ fi
 
 echo "Starting DT Orch (profile: ${PROFILE})..."
 # shellcheck disable=SC2086
-docker compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file .env up -d "${BUILD_ARGS[@]}"
+docker compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"
 
 if [[ "$PROFILE" == "frontend" ]]; then
   echo "Frontend profile started. Open http://localhost:${FRONTEND_PORT:-3000}"

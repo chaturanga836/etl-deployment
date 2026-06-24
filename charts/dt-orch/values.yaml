@@ -61,7 +61,7 @@ ingress:
 
 database:
   # Full connection string to metadata Postgres (RDS, Cloud SQL, etc.)
-  url: "postgresql://elt:changeme@postgres:5432/elt_metadata"
+  url: "postgresql://elt:changeme@postgres:5432/dtorc_metadata"
   workspaceUrl: ""
 
 redis:
@@ -78,6 +78,8 @@ secrets:
   internalServiceToken: "changeme-internal-token"
   fernetKey: ""
   kcAdminClientSecret: ""
+  licenseKey: ""
+  installBootstrapToken: ""
 
 platformInfra:
   url: "http://dt-orch-infra:9000"

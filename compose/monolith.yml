@@ -9,7 +9,7 @@ name: dt-orch
 x-api-env: &api-env
   PYTHONUNBUFFERED: "1"
   DATABASE_URL: ${DATABASE_URL}
-  WORKSPACE_DATABASE_URL: ${WORKSPACE_DATABASE_URL:-postgresql://elt:changeme@postgres:5432/elt_workspace}
+  WORKSPACE_DATABASE_URL: ${WORKSPACE_DATABASE_URL:-postgresql://elt:changeme@postgres:5432/dtorc_workspace}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   KC_SERVER_URL: ${KC_SERVER_URL}
   KC_ISSUER: ${KC_ISSUER:-}
@@ -43,7 +43,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elt} -d elt_metadata"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elt} -d ${DTORC_METADATA_DB_NAME:-dtorc_metadata}"]
       interval: 5s
       timeout: 5s
       retries: 10

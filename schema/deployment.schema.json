@@ -3,10 +3,10 @@
   "$id": "https://dt-orch.local/schema/deployment/v1.json",
   "title": "DT Orch Deployment",
   "type": "object",
-  "required": ["version", "mode", "database", "keycloak", "app"],
+  "required": ["version", "mode", "database", "keycloak", "app", "superadmin", "license"],
   "properties": {
     "version": { "type": "string", "const": "1" },
-    "mode": { "type": "string", "enum": ["monolith", "distributed"] },
+    "mode": { "type": "string", "enum": ["monolith", "distributed", "kubernetes"] },
     "registry": {
       "type": "object",
       "properties": {
@@ -16,14 +16,15 @@
     },
     "database": {
       "type": "object",
-      "required": ["source", "user", "password", "elt_db_name", "keycloak_db_name"],
+      "required": ["source", "user", "password", "metadata_db_name", "workspace_db_name", "keycloak_db_name"],
       "properties": {
         "source": { "type": "string", "enum": ["bundled", "external"] },
         "host": { "type": "string" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 5432 },
         "user": { "type": "string" },
         "password": { "type": "string" },
-        "elt_db_name": { "type": "string", "default": "elt_metadata" },
+        "metadata_db_name": { "type": "string", "default": "dtorc_metadata" },
+        "workspace_db_name": { "type": "string", "default": "dtorc_workspace" },
         "keycloak_db_name": { "type": "string", "default": "keycloak" }
       },
       "allOf": [
@@ -113,6 +114,38 @@
         "image_tag": { "type": "string", "default": "v1.0.0" },
         "sandbox_enabled": { "type": "boolean", "default": true }
       }
+    },
+    "superadmin": {
+      "type": "object",
+      "required": ["username", "password"],
+      "properties": {
+        "username": { "type": "string", "minLength": 3 },
+        "password": { "type": "string", "minLength": 8 },
+        "email": { "type": "string" }
+      }
+    },
+    "license": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "minLength": 10 }
+      }
+    },
+    "kubernetes": {
+      "type": "object",
+      "properties": {
+        "namespace": { "type": "string", "default": "dt-orch" },
+        "ingress_host": { "type": "string" },
+        "kubeconfig_path": { "type": "string" }
+      }
+    },
+    "ssh": {
+      "type": "object",
+      "properties": {
+        "user": { "type": "string", "default": "ubuntu" },
+        "key_path": { "type": "string" },
+        "remote_path": { "type": "string", "default": "/opt/etl-deployment" }
+      }
     }
   },
   "$defs": {
@@ -133,6 +166,10 @@
     {
       "if": { "properties": { "mode": { "const": "distributed" } } },
       "then": { "required": ["distributed"] }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "kubernetes" } } },
+      "then": { "required": ["kubernetes"] }
     }
   ]
 }

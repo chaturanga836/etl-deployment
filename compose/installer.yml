@@ -1,0 +1,23 @@
+# DT Orch setup wizard — run before the platform is installed.
+# Binds to localhost only; mounts Docker socket for compose deploys.
+
+services:
+  installer:
+    build:
+      context: ..
+      dockerfile: installer/Dockerfile
+    container_name: dt-orch-installer
+    ports:
+      - "127.0.0.1:9080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/opt/etl-deployment:ro
+      - installer_state:/opt/etl-deployment-state
+    environment:
+      ETL_DEPLOYMENT_ROOT: /opt/etl-deployment
+      INSTALLER_STATE_DIR: /opt/etl-deployment-state
+      LICENSE_PUBLIC_KEY_PATH: /opt/etl-deployment/config/license-public.pem
+    restart: unless-stopped
+
+volumes:
+  installer_state:

@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "mode": "monolith",
+  "compose_profile": "full",
+  "database_source": "bundled",
+  "generated_at": null
+}

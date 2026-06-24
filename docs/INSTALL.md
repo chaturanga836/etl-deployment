@@ -4,12 +4,48 @@ This repo is the **official install surface** for **DT Orch** (self-hosted BaaS)
 
 | Path | Purpose |
 |------|---------|
+| [compose/installer.yml](compose/installer.yml) | **Setup wizard UI** (recommended first step) |
+| [installer/](installer/) | Wizard frontend + orchestration API |
 | [compose/monolith.yml](compose/monolith.yml) | Single-VM full stack |
 | [compose/roles/](compose/roles/) | Distributed multi-VM roles |
 | [charts/dt-orch/](charts/dt-orch/) | Kubernetes Helm chart |
 | [schema/](schema/) | Deployment JSON schema + examples |
 | [renderer/render.py](renderer/render.py) | Generate `.env` from JSON |
 | [sdk/](sdk/) | Customer app SDKs (separate audience) |
+
+## Setup wizard (recommended)
+
+The guided installer collects super admin credentials, database settings (bundled or external), license key, and deployment target, then deploys with **live log output** in the browser.
+
+```bash
+./scripts/setup-ui.sh
+# Open http://127.0.0.1:9080
+```
+
+Wizard steps: Welcome → Deployment target (monolith / distributed / Kubernetes) → Registry → Super Admin → Database → License → Target config → Review → Deploy → Login URL.
+
+**License keys** (signed offline JWT):
+
+```bash
+python scripts/generate-license-keys.py    # once (vendor)
+python scripts/generate-license.py --customer-id acme-corp --days 365
+```
+
+Paste the output token into the License step. The API validates the same key at startup in production (`LICENSE_KEY`).
+
+The installer binds to **127.0.0.1:9080** only and mounts the Docker socket — do not expose it to the public internet.
+
+## Databases (bundled Postgres)
+
+On first start, `scripts/init-db.sql` creates:
+
+| Database | Purpose |
+|----------|---------|
+| `dtorc_metadata` | Platform control plane (orgs, pipelines, connections) |
+| `dtorc_workspace` | Per-workspace customer data / migrations |
+| `keycloak` | Authentication (Keycloak) |
+
+Configure names via `DTORC_METADATA_DB_NAME`, `DTORC_WORKSPACE_DB_NAME`, and `DATABASE_URL` / `WORKSPACE_DATABASE_URL` in `.env`.
 
 ## Prerequisites
 
@@ -19,6 +55,9 @@ This repo is the **official install surface** for **DT Orch** (self-hosted BaaS)
 
 ## Quick start — monolith (PoC)
 
+**Preferred:** use the [setup wizard](#setup-wizard-recommended) above.
+
+CLI alternative:
 ```bash
 cp .env.platform.example .env
 # Edit registry URL and secrets
