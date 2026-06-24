@@ -85,6 +85,8 @@ python renderer/render.py --config schema/examples/distributed-aws-vm.json --out
 2. Update [VERSION](VERSION) `platform` and `registry.url` (`ghcr.io/<org>`)
 3. Tag `etl-deployment` `vX.Y.Z` (scraper image)
 
+Release API images compile Python to bytecode and strip `.py` sources by default. See [CODE_PROTECTION.md](CODE_PROTECTION.md) for limits and stronger options.
+
 ## Internal SaaS deploy
 
 Vendor production still uses Jenkins per app repo. This repo is for **customer self-host** and local PoC.

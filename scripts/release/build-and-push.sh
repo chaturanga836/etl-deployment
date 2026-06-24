@@ -30,7 +30,8 @@ push_image() {
 }
 
 build_api() {
-  docker build -t "dt-orch-api:local" "${ROOT}/../etl-back"
+  docker build -t "dt-orch-api:local" "${ROOT}/../etl-back" \
+    --build-arg "SOURCE_PROTECTION=1"
   push_image "dt-orch-api:local" "dt-orch-api"
 }
 
