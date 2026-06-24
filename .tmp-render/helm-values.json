@@ -1,0 +1,16 @@
+{
+  "global": {
+    "imageTag": "v1.0.0"
+  },
+  "registry": {
+    "url": "registry.example.com/elt"
+  },
+  "api": {
+    "env": {
+      "DATABASE_URL": "postgresql://elt:changeme@postgres:5432/elt_metadata",
+      "REDIS_URL": "redis://redis:6379/0",
+      "PLATFORM_INFRA_URL": "http://infra-service:9000",
+      "SANDBOX_ENABLED": "true"
+    }
+  }
+}

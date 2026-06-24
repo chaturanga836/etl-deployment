@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "platform_version": "v1.0.0",
+  "mode": "monolith",
+  "compose_profile": "full",
+  "database_source": "bundled",
+  "roles": [
+    {
+      "name": "monolith",
+      "compose_file": "compose/monolith.yml",
+      "profile": "full"
+    }
+  ],
+  "generated_at": "2026-06-24T09:19:06.388226+00:00"
+}

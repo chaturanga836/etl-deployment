@@ -1,0 +1,39 @@
+# Platform infra-service — requires Docker socket on this host (data-plane provisioning).
+
+name: elt-role-infra
+
+services:
+  infra-service:
+    image: ${INFRA_IMAGE:-registry.example.com/elt/baas-infra:v1.0.0}
+    container_name: baas-infra-service
+    restart: unless-stopped
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      PROVISION_MODE: ${PROVISION_MODE:-docker}
+      DATA_PLANE_NETWORK: ${DATA_PLANE_NETWORK:-data-plane-net}
+      LOCAL_POSTGRES_URL: ${LOCAL_POSTGRES_URL:-postgresql://elt:changeme@postgres:5432/postgres}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - infra_instances:/app/data/instances
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    ports:
+      - "${INFRA_SERVICE_PORT:-9000}:9000"
+    networks:
+      - elt-net
+      - data-plane-net
+
+networks:
+  elt-net:
+    external: true
+    name: elt-net
+  data-plane-net:
+    external: true
+    name: data-plane-net
+
+volumes:
+  infra_instances:

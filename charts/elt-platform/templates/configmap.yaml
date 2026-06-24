@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "elt-platform.fullname" . }}-api-config
+  labels:
+    app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+    app.kubernetes.io/component: api
+data:
+  KC_SERVER_URL: {{ .Values.keycloak.serverUrl | quote }}
+  KEYCLOAK_TOKEN_URL: {{ .Values.keycloak.tokenUrl | quote }}
+  KC_REALM: {{ .Values.keycloak.realm | quote }}
+  KC_DEV_REALM: {{ .Values.keycloak.realm | quote }}
+  KC_WEB_CLIENT_ID: {{ .Values.api.env.KC_WEB_CLIENT_ID | quote }}
+  KC_ADMIN_CLIENT_ID: {{ .Values.keycloak.adminClientId | quote }}
+  PLATFORM_INFRA_URL: {{ .Values.platformInfra.url | quote }}
+  SANDBOX_ENABLED: {{ .Values.api.env.SANDBOX_ENABLED | quote }}
+  DEBUG: {{ .Values.api.env.DEBUG | quote }}
+  SCRAPER_SERVICE_URL: {{ .Values.scraper.url | quote }}
+  FRONTEND_URL: {{ printf "https://%s" .Values.ingress.host | quote }}
+{{- if .Values.database.workspaceUrl }}
+  WORKSPACE_DATABASE_URL: {{ .Values.database.workspaceUrl | quote }}
+{{- end }}

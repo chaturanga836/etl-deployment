@@ -1,0 +1,40 @@
+# Dev override — build images from sibling repos instead of pulling from registry.
+# Usage (from etl-deployment root):
+#   docker compose -f compose/monolith.yml -f compose/docker-compose.dev.yml --profile full up -d --build
+
+services:
+  api:
+    build:
+      context: ../../etl-back
+      dockerfile: Dockerfile
+    image: elt-backend:${IMAGE_TAG:-v1.0.0}
+
+  worker:
+    build:
+      context: ../../etl-back
+      dockerfile: Dockerfile
+    image: elt-backend:${IMAGE_TAG:-v1.0.0}
+
+  infra-service:
+    build:
+      context: ../../platform-infra-repo
+      dockerfile: infra-service/Dockerfile
+    image: baas-infra:${IMAGE_TAG:-v1.0.0}
+
+  scraper-service:
+    build:
+      context: ../scraper-service
+      dockerfile: Dockerfile
+    image: elt-scraper:${IMAGE_TAG:-v1.0.0}
+
+  frontend:
+    build:
+      context: ../../elt-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_BUILD_ID: ${NEXT_PUBLIC_BUILD_ID:-development}
+        NEXT_PUBLIC_KC_URL: ${NEXT_PUBLIC_KC_URL:-http://localhost:8081}
+        NEXT_PUBLIC_KC_REALM: ${NEXT_PUBLIC_KC_REALM:-workspace-realm}
+        NEXT_PUBLIC_KC_CLIENT_ID: ${NEXT_PUBLIC_KC_CLIENT_ID:-workspace-web}
+    image: elt-frontend:${IMAGE_TAG:-v1.0.0}

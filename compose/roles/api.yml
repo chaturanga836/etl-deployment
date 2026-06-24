@@ -1,0 +1,58 @@
+# API role — distributed deploy on dedicated host(s).
+# Requires external postgres, redis, infra-service (set URLs in .env).
+#   docker compose -f compose/networks.yml up -d
+#   docker compose -f compose/roles/api.yml --env-file .env up -d
+
+name: elt-role-api
+
+x-api-env: &api-env
+  PYTHONUNBUFFERED: "1"
+  DATABASE_URL: ${DATABASE_URL}
+  WORKSPACE_DATABASE_URL: ${WORKSPACE_DATABASE_URL}
+  REDIS_URL: ${REDIS_URL}
+  KC_SERVER_URL: ${KC_SERVER_URL}
+  KC_ISSUER: ${KC_ISSUER:-}
+  KC_JWKS_URL: ${KC_JWKS_URL:-}
+  KEYCLOAK_TOKEN_URL: ${KEYCLOAK_TOKEN_URL}
+  KC_REALM: ${KC_REALM:-}
+  KC_DEV_REALM: ${KC_DEV_REALM}
+  KC_WEB_CLIENT_ID: ${KC_WEB_CLIENT_ID:-workspace-web}
+  KC_ADMIN_CLIENT_ID: ${KC_ADMIN_CLIENT_ID}
+  KC_ADMIN_CLIENT_SECRET: ${KC_ADMIN_CLIENT_SECRET}
+  SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+  SCRAPER_SERVICE_URL: ${SCRAPER_SERVICE_URL}
+  SCRAPER_INTERNAL_TOKEN: ${SCRAPER_INTERNAL_TOKEN:-}
+  PLATFORM_INFRA_URL: ${PLATFORM_INFRA_URL}
+  INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+  FERNET_KEY: ${FERNET_KEY:-}
+  FRONTEND_URL: ${FRONTEND_URL}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+
+services:
+  api:
+    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
+    container_name: elt-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *api-env
+    volumes:
+      - api_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks:
+      - elt-net
+
+networks:
+  elt-net:
+    external: true
+    name: elt-net
+
+volumes:
+  api_logs:

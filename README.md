@@ -1,16 +1,23 @@
-# ELT SDK
+# ELT Deployment
 
-Customer SDK libraries for embedding the ELT Engine API in your application.
+Official **self-host install** package and **customer SDK** for the ELT Platform.
 
-Production services (API, UI, infra) deploy via **Jenkins** from their own repos — not from this repo.
+## Platform install (ops / self-host)
 
-| Repo | Jenkins deploy |
-|------|----------------|
-| [etl-back](https://github.com/chaturanga836/etl-back) | API + worker |
-| [elt-frontend](https://github.com/chaturanga836/elt-frontend) | Next.js UI |
-| [platform-infra-repo](https://github.com/chaturanga836/platform-infra-repo) | Database provisioning service |
+See **[docs/INSTALL.md](docs/INSTALL.md)** for Compose, Helm, distributed VMs, and upgrades.
 
-## Install
+Quick start:
+
+```bash
+cp .env.platform.example .env
+./scripts/install.sh monolith full
+```
+
+Release manifest: [VERSION](VERSION)
+
+## SDK (app developers)
+
+Embed the ELT API in your application — no need to clone this repo for install.
 
 ### Node / React / Angular
 
@@ -25,8 +32,6 @@ const client = new EltClient({
   baseUrl: 'https://api.example.com',
   getAccessToken: () => keycloakToken,
 });
-
-const { items } = await client.listProjects();
 ```
 
 Package source: [`sdk/javascript/`](sdk/javascript/)
@@ -39,13 +44,6 @@ pip install elt-sdk
 pip install ./sdk/python
 ```
 
-```python
-from elt_sdk import EltClient
-
-client = EltClient("https://api.example.com", get_access_token=lambda: token)
-projects = client.list_projects()
-```
-
 Package source: [`sdk/python/`](sdk/python/)
 
 ### PHP / Laravel
@@ -54,54 +52,34 @@ Package source: [`sdk/python/`](sdk/python/)
 composer require elt/sdk
 ```
 
-```php
-use Elt\Sdk\EltClient;
-
-$client = new EltClient('https://api.example.com', fn () => $token);
-$projects = $client->listProjects();
-```
-
 Package source: [`sdk/php/`](sdk/php/)
 
-## Configuration
-
-| Variable | Description |
-|----------|-------------|
-| `ELT_API_URL` / `DTORCH_API_URL` | Base URL of your deployed etl-back API (e.g. `https://api.example.com`) |
-| `DTORCH_ACCESS_TOKEN` | Keycloak JWT for CLI and scripts (`workspace_admin` for `db push`) |
-| `ELT_ACCESS_TOKEN` | Alias for `DTORCH_ACCESS_TOKEN` (legacy) |
-| Bearer token | Keycloak JWT from your auth flow — passed to the client constructor |
-
-## SDK scope (v1)
-
-Thin HTTP clients for public etl-back routes:
-
-- **Auth** — `POST /api/v1/auth/signup`
-- **Studio** — account, projects, service catalog
-- **Workspaces** — list workspaces
-- **Database migrations** — list/apply versioned SQL (`GET/POST .../databases/{id}/migrations`)
-
-Protected routes require a valid Keycloak bearer token.
-
-### Database migrations (CLI)
-
-Supabase-style workflow via [`cli/`](cli/):
+### CLI (database migrations)
 
 ```bash
 pip install ./sdk/python ./cli
-export DTORCH_ACCESS_TOKEN="your-jwt"
 dtorch init
 dtorch link --api-url https://api.example.com --workspace 42 --database 1
-dtorch migration new create_users
 dtorch db push
 ```
 
-See [`cli/README.md`](cli/README.md) for full documentation.
+See [`cli/README.md`](cli/README.md).
 
-## Legacy orchestration files
+## Repository layout
 
-This repo previously held Docker Compose orchestration. That role now lives in each service repo (`docker-compose.yml` + `deploy.sh` + `Jenkinsfile`). Legacy compose/nginx/renderer files may remain for reference but are **not** the supported production path.
+| Directory | Audience |
+|-----------|----------|
+| `compose/`, `charts/`, `terraform/`, `schema/`, `scripts/` | Platform install |
+| `sdk/`, `cli/` | Application developers |
+
+## Application source repos
+
+| Repo | Role |
+|------|------|
+| [etl-back](https://github.com/chaturanga836/etl-back) | API + Celery worker image |
+| [elt-frontend](https://github.com/chaturanga836/elt-frontend) | Next.js UI image |
+| [platform-infra-repo](https://github.com/chaturanga836/platform-infra-repo) | Infra provisioning service image |
 
 ## License
 
-MIT
+MIT (SDK). Platform licensing terms apply to self-host deployments separately.

@@ -1,0 +1,66 @@
+{
+  "version": "1",
+  "mode": "distributed",
+  "registry": {
+    "url": "registry.example.com/elt",
+    "image_tag": "v1.0.0"
+  },
+  "database": {
+    "source": "external",
+    "host": "elt-metadata.abc123.us-east-1.rds.amazonaws.com",
+    "port": 5432,
+    "user": "elt_admin",
+    "password": "CHANGE_ME",
+    "elt_db_name": "elt_metadata",
+    "keycloak_db_name": "keycloak"
+  },
+  "distributed": {
+    "services": {
+      "frontend": {
+        "host": "10.0.1.10",
+        "port": 443
+      },
+      "backend": {
+        "host": "10.0.2.20",
+        "port": 8000
+      },
+      "worker": {
+        "host": "10.0.2.21",
+        "replicas": 2
+      },
+      "auth": {
+        "host": "10.0.3.30",
+        "port": 8081
+      },
+      "infra": {
+        "host": "10.0.2.22",
+        "port": 9000
+      },
+      "redis": {
+        "host": "elt-redis.abc123.cache.amazonaws.com",
+        "port": 6379,
+        "managed": true
+      }
+    },
+    "aws": {
+      "region": "us-east-1",
+      "provisioning": "existing"
+    }
+  },
+  "optional_features": {
+    "scraper": "disabled",
+    "keycloak": "external"
+  },
+  "keycloak": {
+    "admin_user": "admin",
+    "admin_password": "CHANGE_ME",
+    "realm": "workspace-realm",
+    "admin_client_id": "admin-cli",
+    "admin_client_secret": ""
+  },
+  "app": {
+    "name": "ELT Engine",
+    "image_tag": "v1.0.0",
+    "sandbox_enabled": true
+  }
+}

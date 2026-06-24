@@ -1,0 +1,13 @@
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}/
+{{- else }}
+  kubectl port-forward svc/{{ include "elt-platform.fullname" . }}-frontend 3000:{{ .Values.frontend.port }}
+{{- end }}
+
+2. API health:
+  curl https://{{ .Values.ingress.host }}/health
+
+3. Configure Keycloak realm "{{ .Values.keycloak.realm }}" and set secrets.fernetKey before production.
+
+4. Infra-service mode: {{ .Values.infra.mode }} — for production K8s consider a dedicated data-plane node with dockerSocket or BYO managed storage.

@@ -1,0 +1,94 @@
+# Default values for elt-platform.
+# Override for production: external RDS, ElastiCache, Keycloak, ingress host.
+
+global:
+  imageTag: "v1.0.0"
+  registry: "registry.example.com/elt"
+
+nameOverride: ""
+fullnameOverride: ""
+
+api:
+  replicaCount: 2
+  image:
+    repository: elt-api
+  port: 8000
+  resources: {}
+  env:
+    SANDBOX_ENABLED: "true"
+    DEBUG: "false"
+    KC_WEB_CLIENT_ID: workspace-web
+    KC_DEV_REALM: workspace-realm
+    KC_REALM: workspace-realm
+
+worker:
+  replicaCount: 1
+  image:
+    repository: elt-api
+  resources:
+    limits:
+      memory: 1Gi
+      cpu: "2"
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: elt-frontend
+  port: 3000
+  build:
+    nextPublicApiUrl: "https://studio.example.com/api/v1"
+    nextPublicKcUrl: "https://auth.example.com"
+    nextPublicKcRealm: workspace-realm
+    nextPublicKcClientId: workspace-web
+    nextPublicBuildId: production
+
+infra:
+  enabled: true
+  mode: dockerSocket
+  image:
+    repository: baas-infra
+  port: 9000
+  provisionMode: docker
+  dataPlaneNetwork: data-plane-net
+
+ingress:
+  enabled: true
+  className: nginx
+  host: studio.example.com
+  tls:
+    enabled: false
+    secretName: elt-platform-tls
+
+database:
+  # Full connection string to metadata Postgres (RDS, Cloud SQL, etc.)
+  url: "postgresql://elt:changeme@postgres:5432/elt_metadata"
+  workspaceUrl: ""
+
+redis:
+  url: "redis://redis:6379/0"
+
+keycloak:
+  external: true
+  serverUrl: "http://keycloak:8080"
+  tokenUrl: "http://keycloak:8080/realms/workspace-realm/protocol/openid-connect/token"
+  realm: workspace-realm
+  adminClientId: admin-cli
+
+secrets:
+  internalServiceToken: "changeme-internal-token"
+  fernetKey: ""
+  kcAdminClientSecret: ""
+
+platformInfra:
+  url: "http://elt-platform-infra:9000"
+
+scraper:
+  enabled: false
+  url: "http://elt-scraper:8080"
+
+migrations:
+  enabled: true
+
+serviceAccount:
+  create: true
+  name: ""

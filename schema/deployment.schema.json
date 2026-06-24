@@ -7,6 +7,13 @@
   "properties": {
     "version": { "type": "string", "const": "1" },
     "mode": { "type": "string", "enum": ["monolith", "distributed"] },
+    "registry": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "default": "registry.example.com/elt" },
+        "image_tag": { "type": "string", "default": "v1.0.0" }
+      }
+    },
     "database": {
       "type": "object",
       "required": ["source", "user", "password", "elt_db_name", "keycloak_db_name"],
@@ -47,13 +54,27 @@
       "properties": {
         "services": {
           "type": "object",
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "host": { "type": "string" },
-              "port": { "type": "integer" },
-              "aws_instance_id": { "type": "string" }
-            }
+          "properties": {
+            "frontend": { "$ref": "#/$defs/serviceHost" },
+            "backend": { "$ref": "#/$defs/serviceHost" },
+            "auth": { "$ref": "#/$defs/serviceHost" },
+            "worker": {
+              "type": "object",
+              "properties": {
+                "host": { "type": "string" },
+                "replicas": { "type": "integer", "minimum": 1, "default": 1 }
+              }
+            },
+            "infra": { "$ref": "#/$defs/serviceHost" },
+            "redis": {
+              "type": "object",
+              "properties": {
+                "host": { "type": "string" },
+                "port": { "type": "integer", "default": 6379 },
+                "managed": { "type": "boolean", "default": false }
+              }
+            },
+            "proxy": { "$ref": "#/$defs/serviceHost" }
           }
         },
         "aws": {
@@ -67,13 +88,20 @@
         }
       }
     },
+    "optional_features": {
+      "type": "object",
+      "properties": {
+        "scraper": { "type": "string", "enum": ["enabled", "disabled"], "default": "enabled" },
+        "keycloak": { "type": "string", "enum": ["bundled", "external"], "default": "external" }
+      }
+    },
     "keycloak": {
       "type": "object",
       "required": ["admin_user", "admin_password", "realm"],
       "properties": {
         "admin_user": { "type": "string" },
         "admin_password": { "type": "string" },
-        "realm": { "type": "string", "default": "etl-dev" },
+        "realm": { "type": "string", "default": "workspace-realm" },
         "admin_client_id": { "type": "string", "default": "admin-cli" },
         "admin_client_secret": { "type": "string", "default": "" }
       }
@@ -84,6 +112,16 @@
         "name": { "type": "string", "default": "ELT Engine" },
         "image_tag": { "type": "string", "default": "v1.0.0" },
         "sandbox_enabled": { "type": "boolean", "default": true }
+      }
+    }
+  },
+  "$defs": {
+    "serviceHost": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "aws_instance_id": { "type": "string" }
       }
     }
   },

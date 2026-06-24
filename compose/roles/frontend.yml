@@ -1,0 +1,39 @@
+# Frontend + nginx proxy role.
+
+name: elt-role-frontend
+
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:-registry.example.com/elt/elt-frontend:v1.0.0}
+    container_name: elt-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    expose:
+      - "3000"
+    networks:
+      - elt-net
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: elt-proxy
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ../../nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../nginx/ssl.conf.template:/etc/nginx/templates/ssl.conf.template:ro
+      - ../../scripts/proxy-entrypoint.sh:/docker-entrypoint.d/40-enable-ssl.sh:ro
+      - /var/www/letsencrypt:/var/www/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+    networks:
+      - elt-net
+
+networks:
+  elt-net:
+    external: true
+    name: elt-net

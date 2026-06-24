@@ -1,0 +1,11 @@
+# Shared networks for distributed role deploys.
+# Create once before role installs:
+#   docker compose -f compose/networks.yml up -d
+
+networks:
+  elt-net:
+    name: elt-net
+    driver: bridge
+  data-plane-net:
+    name: data-plane-net
+    driver: bridge

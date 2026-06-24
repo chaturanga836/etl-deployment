@@ -1,0 +1,261 @@
+# Monolith stack — single VM PoC / small self-host.
+# Customer:  scripts/install.sh monolith
+# Dev build:  docker compose -f compose/monolith.yml -f compose/docker-compose.dev.yml up -d --build
+#
+# Profiles: full | backend | frontend | auth | ollama | agent
+
+name: elt-engine
+
+x-api-env: &api-env
+  PYTHONUNBUFFERED: "1"
+  DATABASE_URL: ${DATABASE_URL}
+  WORKSPACE_DATABASE_URL: ${WORKSPACE_DATABASE_URL:-postgresql://elt:changeme@postgres:5432/elt_workspace}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  KC_SERVER_URL: ${KC_SERVER_URL}
+  KC_ISSUER: ${KC_ISSUER:-}
+  KC_JWKS_URL: ${KC_JWKS_URL:-}
+  KEYCLOAK_TOKEN_URL: ${KEYCLOAK_TOKEN_URL}
+  KC_REALM: ${KC_REALM:-}
+  KC_DEV_REALM: ${KC_DEV_REALM}
+  KC_WEB_CLIENT_ID: ${KC_WEB_CLIENT_ID:-workspace-web}
+  KC_ADMIN_CLIENT_ID: ${KC_ADMIN_CLIENT_ID}
+  KC_ADMIN_CLIENT_SECRET: ${KC_ADMIN_CLIENT_SECRET}
+  SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+  SCRAPER_SERVICE_URL: ${SCRAPER_SERVICE_URL:-http://scraper-service:8080}
+  SCRAPER_INTERNAL_TOKEN: ${SCRAPER_INTERNAL_TOKEN:-}
+  PLATFORM_INFRA_URL: ${PLATFORM_INFRA_URL:-http://infra-service:9000}
+  INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}
+  FERNET_KEY: ${FERNET_KEY:-}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: elt-postgres
+    restart: unless-stopped
+    profiles: [full, backend, auth]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-elt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elt} -d elt_metadata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - elt-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: elt-redis
+    restart: unless-stopped
+    profiles: [full, backend]
+    networks:
+      - elt-net
+
+  api:
+    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
+    container_name: elt-api
+    restart: unless-stopped
+    profiles: [full, backend]
+    env_file: .env
+    environment:
+      <<: *api-env
+    volumes:
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      infra-service:
+        condition: service_healthy
+      scraper-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks:
+      - elt-net
+      - data-plane-net
+
+  infra-service:
+    image: ${INFRA_IMAGE:-registry.example.com/elt/baas-infra:v1.0.0}
+    container_name: baas-infra-service
+    restart: unless-stopped
+    profiles: [full, backend]
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}
+      PROVISION_MODE: ${PROVISION_MODE:-docker}
+      DATA_PLANE_NETWORK: ${DATA_PLANE_NETWORK:-data-plane-net}
+      LOCAL_POSTGRES_URL: postgresql://${POSTGRES_USER:-elt}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/postgres
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - infra_instances:/app/data/instances
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    ports:
+      - "${INFRA_SERVICE_PORT:-9000}:9000"
+    networks:
+      - elt-net
+      - data-plane-net
+
+  scraper-service:
+    image: ${SCRAPER_IMAGE:-registry.example.com/elt/elt-scraper:v1.0.0}
+    container_name: elt-scraper
+    restart: unless-stopped
+    profiles: [full, backend]
+    environment:
+      SCRAPER_TIMEOUT_SECONDS: ${SCRAPER_TIMEOUT_SECONDS:-30}
+      SCRAPER_VERIFY_URL: ${SCRAPER_VERIFY_URL:-}
+      SCRAPER_INTERNAL_TOKEN: ${SCRAPER_INTERNAL_TOKEN:-}
+    ports:
+      - "${SCRAPER_PORT:-8088}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - elt-net
+
+  worker:
+    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
+    container_name: elt-worker
+    restart: unless-stopped
+    profiles: [full, backend]
+    command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
+    env_file: .env
+    environment:
+      <<: *api-env
+    volumes:
+      - backend_logs:/app/logs
+    tmpfs:
+      - /tmp:size=256M,noexec
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      infra-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A core.celery_app.celery_app inspect ping --timeout 10 2>&1 | grep -qi pong",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+    networks:
+      - elt-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.0
+    container_name: elt-keycloak
+    restart: unless-stopped
+    profiles: [full, auth]
+    command: start-dev
+    env_file: .env
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-elt}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-changeme}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - elt-net
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-registry.example.com/elt/elt-frontend:v1.0.0}
+    container_name: elt-frontend
+    restart: unless-stopped
+    profiles: [full, frontend]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - elt-net
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    container_name: elt-ollama
+    restart: unless-stopped
+    profiles: [ollama]
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - elt-net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 40s
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: elt-proxy
+    restart: unless-stopped
+    profiles: [full]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ../nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/ssl.conf.template:/etc/nginx/templates/ssl.conf.template:ro
+      - ../scripts/proxy-entrypoint.sh:/docker-entrypoint.d/40-enable-ssl.sh:ro
+      - /var/www/letsencrypt:/var/www/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - elt-net
+
+networks:
+  elt-net:
+    driver: bridge
+  data-plane-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_logs:
+  ollama_data:
+  infra_instances:

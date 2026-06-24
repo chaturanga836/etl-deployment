@@ -1,0 +1,44 @@
+# Celery worker role — scale with: docker compose -f compose/roles/worker.yml up -d --scale worker=3
+
+name: elt-role-worker
+
+x-api-env: &api-env
+  PYTHONUNBUFFERED: "1"
+  DATABASE_URL: ${DATABASE_URL}
+  REDIS_URL: ${REDIS_URL}
+  KC_SERVER_URL: ${KC_SERVER_URL}
+  KEYCLOAK_TOKEN_URL: ${KEYCLOAK_TOKEN_URL}
+  KC_REALM: ${KC_REALM:-}
+  KC_DEV_REALM: ${KC_DEV_REALM}
+  KC_WEB_CLIENT_ID: ${KC_WEB_CLIENT_ID:-workspace-web}
+  KC_ADMIN_CLIENT_ID: ${KC_ADMIN_CLIENT_ID}
+  KC_ADMIN_CLIENT_SECRET: ${KC_ADMIN_CLIENT_SECRET}
+  SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+  SCRAPER_SERVICE_URL: ${SCRAPER_SERVICE_URL}
+  SCRAPER_INTERNAL_TOKEN: ${SCRAPER_INTERNAL_TOKEN:-}
+  PLATFORM_INFRA_URL: ${PLATFORM_INFRA_URL}
+  INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+  FERNET_KEY: ${FERNET_KEY:-}
+
+services:
+  worker:
+    image: ${API_IMAGE:-registry.example.com/elt/elt-api:v1.0.0}
+    restart: unless-stopped
+    command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
+    env_file: .env
+    environment:
+      <<: *api-env
+    tmpfs:
+      - /tmp:size=256M,noexec
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+    networks:
+      - elt-net
+
+networks:
+  elt-net:
+    external: true
+    name: elt-net

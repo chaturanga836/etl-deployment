@@ -1,0 +1,30 @@
+# Example: external RDS + ElastiCache (no in-cluster Postgres/Redis)
+
+database:
+  url: "postgresql://elt_admin:SECRET@elt-metadata.xxxx.us-east-1.rds.amazonaws.com:5432/elt_metadata"
+
+redis:
+  url: "redis://elt-redis.xxxx.cache.amazonaws.com:6379/0"
+
+keycloak:
+  external: true
+  serverUrl: "https://auth.example.com"
+  tokenUrl: "https://auth.example.com/realms/workspace-realm/protocol/openid-connect/token"
+
+frontend:
+  build:
+    nextPublicApiUrl: "https://studio.example.com/api/v1"
+    nextPublicKcUrl: "https://auth.example.com"
+
+ingress:
+  host: studio.example.com
+  tls:
+    enabled: true
+    secretName: elt-platform-tls
+
+infra:
+  enabled: true
+  mode: dockerSocket
+
+scraper:
+  enabled: false

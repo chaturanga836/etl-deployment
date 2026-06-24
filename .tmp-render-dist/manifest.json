@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "platform_version": "v1.0.0",
+  "mode": "distributed",
+  "compose_profile": "distributed",
+  "database_source": "external",
+  "roles": [
+    {
+      "name": "api",
+      "compose_file": "compose/roles/api.yml",
+      "host": "10.0.2.20",
+      "port": 8000
+    },
+    {
+      "name": "worker",
+      "compose_file": "compose/roles/worker.yml",
+      "host": "10.0.2.21",
+      "replicas": 2
+    },
+    {
+      "name": "frontend",
+      "compose_file": "compose/roles/frontend.yml",
+      "host": "10.0.1.10",
+      "port": 443
+    },
+    {
+      "name": "infra",
+      "compose_file": "compose/roles/infra.yml",
+      "host": "10.0.2.22",
+      "port": 9000
+    }
+  ],
+  "generated_at": "2026-06-24T09:19:06.637695+00:00"
+}

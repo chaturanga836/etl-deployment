@@ -1,0 +1,13 @@
+# Platform release manifest — bump on each self-host release.
+# CI: tag app repos vX.Y.Z, push images, then update this file and tag etl-deployment.
+
+platform: "1.0.0"
+
+registry:
+  url: "registry.example.com/elt"
+
+images:
+  api: "elt-api"
+  frontend: "elt-frontend"
+  infra: "baas-infra"
+  scraper: "elt-scraper"

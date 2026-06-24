@@ -1,0 +1,69 @@
+{{- if .Values.infra.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "elt-platform.fullname" . }}-infra
+  labels:
+    app.kubernetes.io/component: infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+      app.kubernetes.io/component: infra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+        app.kubernetes.io/component: infra
+    spec:
+      containers:
+        - name: infra
+          image: {{ include "elt-platform.infraImage" . }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.infra.port }}
+          env:
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "elt-platform.fullname" . }}-secrets
+                  key: INTERNAL_SERVICE_TOKEN
+            - name: PROVISION_MODE
+              value: {{ .Values.infra.provisionMode | quote }}
+            - name: DATA_PLANE_NETWORK
+              value: {{ .Values.infra.dataPlaneNetwork | quote }}
+          {{- if eq .Values.infra.mode "dockerSocket" }}
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          securityContext:
+            privileged: true
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.infra.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      {{- if eq .Values.infra.mode "dockerSocket" }}
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "elt-platform.fullname" . }}-infra
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "elt-platform.fullname" . }}
+    app.kubernetes.io/component: infra
+  ports:
+    - port: {{ .Values.infra.port }}
+      targetPort: {{ .Values.infra.port }}
+      name: http
+{{- end }}

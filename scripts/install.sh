@@ -1,21 +1,188 @@
 #!/usr/bin/env bash
+# ELT Platform installer — monolith, distributed roles, or config-driven render.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROFILE="${1:-full}"
-HEALTH_URL="${HEALTH_URL:-}"
+PROFILE=""
+CONFIG=""
+ROLE=""
+DEV_BUILD=false
+SCALE=""
 
-if [[ ! -f .env ]]; then
-  cp .env.example .env
-  echo "Created .env from .env.example — review secrets before production use."
+usage() {
+  cat <<'EOF'
+Usage: install.sh [OPTIONS] [PROFILE]
+
+Profiles (monolith):
+  full       Entire stack behind nginx (default)
+  backend    API, worker, postgres, redis, infra, scraper
+  frontend   Next.js only
+  auth       Postgres + Keycloak
+
+Options:
+  --config PATH     Render .env + manifest.json from deployment JSON, then exit unless profile/role set
+  --role NAME       Distributed role: api | worker | frontend | infra
+  --dev             Use compose/docker-compose.dev.yml (build from sibling repos)
+  --scale N         Worker replicas (with --role worker)
+  -h, --help        Show this help
+
+Examples:
+  ./scripts/install.sh --config schema/examples/monolith-bundled.json full
+  ./scripts/install.sh monolith full
+  ./scripts/install.sh --role api
+  ./scripts/install.sh --role worker --scale 3
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config) CONFIG="$2"; shift 2 ;;
+    --role) ROLE="$2"; shift 2 ;;
+    --dev) DEV_BUILD=true; shift ;;
+    --scale) SCALE="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    monolith) PROFILE="${PROFILE:-full}"; shift ;;
+    full|backend|frontend|auth)
+      PROFILE="$1"; shift ;;
+    *) echo "Unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+ensure_env() {
+  if [[ ! -f .env ]]; then
+    if [[ -f .env.platform.example ]]; then
+      cp .env.platform.example .env
+      echo "Created .env from .env.platform.example"
+    else
+      echo "ERROR: No .env found. Copy .env.platform.example or use --config."
+      exit 1
+    fi
+  fi
+}
+
+generate_secrets_if_missing() {
+  # shellcheck disable=SC1091
+  set -a
+  source .env
+  set +a
+
+  local updated=false
+
+  if [[ -z "${FERNET_KEY:-}" ]]; then
+    FERNET_KEY="$(openssl rand -base64 32)"
+    echo "FERNET_KEY=${FERNET_KEY}" >> .env
+    updated=true
+    echo "Generated FERNET_KEY"
+  fi
+
+  if [[ "${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}" == "changeme-internal-token" ]]; then
+    if [[ "${ELT_ENV:-development}" == "production" ]]; then
+      echo "ERROR: Set INTERNAL_SERVICE_TOKEN before production install."
+      exit 1
+    fi
+    INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)"
+    if grep -q '^INTERNAL_SERVICE_TOKEN=' .env; then
+      sed -i.bak "s/^INTERNAL_SERVICE_TOKEN=.*/INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}/" .env
+      rm -f .env.bak
+    else
+      echo "INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}" >> .env
+    fi
+    updated=true
+    echo "Generated INTERNAL_SERVICE_TOKEN (development)"
+  fi
+
+  if [[ "$updated" == true ]]; then
+  # shellcheck disable=SC1091
+    set -a
+    source .env
+    set +a
+  fi
+}
+
+production_guards() {
+  # shellcheck disable=SC1091
+  set -a
+  source .env
+  set +a
+
+  if [[ "${ELT_ENV:-development}" != "production" ]]; then
+    return 0
+  fi
+
+  if [[ "${SANDBOX_ENABLED:-true}" != "true" ]]; then
+    echo "ERROR: SANDBOX_ENABLED must be true in production."
+    exit 1
+  fi
+
+  if [[ "${POSTGRES_PASSWORD:-changeme}" == "changeme" ]]; then
+    echo "ERROR: Change POSTGRES_PASSWORD before production install."
+    exit 1
+  fi
+}
+
+render_config() {
+  python3 "${ROOT_DIR}/renderer/render.py" --config "$CONFIG" --out "$ROOT_DIR" --helm-values
+  echo "Rendered .env and manifest.json from ${CONFIG}"
+}
+
+compose_files() {
+  local files=()
+  if [[ -n "$ROLE" ]]; then
+    case "$ROLE" in
+      api) files+=(-f compose/roles/api.yml) ;;
+      worker) files+=(-f compose/roles/worker.yml) ;;
+      frontend) files+=(-f compose/roles/frontend.yml) ;;
+      infra) files+=(-f compose/roles/infra.yml) ;;
+      *) echo "Unknown role: $ROLE"; exit 1 ;;
+    esac
+  else
+    files+=(-f compose/monolith.yml)
+    if [[ "$DEV_BUILD" == true ]]; then
+      files+=(-f compose/docker-compose.dev.yml)
+    fi
+  fi
+  echo "${files[@]}"
+}
+
+if [[ -n "$CONFIG" ]]; then
+  render_config
 fi
+
+ensure_env
+generate_secrets_if_missing
+production_guards
 
 # shellcheck disable=SC1091
 set -a
 source .env
 set +a
+
+if [[ -n "$ROLE" ]]; then
+  echo "Ensuring Docker networks exist..."
+  docker compose -f compose/networks.yml up -d
+
+  read -r -a COMPOSE_ARGS <<< "$(compose_files)"
+  SCALE_ARGS=()
+  if [[ "$ROLE" == "worker" && -n "$SCALE" ]]; then
+    SCALE_ARGS=(--scale "worker=${SCALE}")
+  fi
+
+  BUILD_ARGS=()
+  if [[ "$DEV_BUILD" == true ]]; then
+    BUILD_ARGS=(--build)
+  fi
+
+  echo "Starting role: ${ROLE}..."
+  # shellcheck disable=SC2086
+  docker compose "${COMPOSE_ARGS[@]}" --env-file .env up -d "${BUILD_ARGS[@]}" "${SCALE_ARGS[@]}"
+  echo "Role ${ROLE} started."
+  exit 0
+fi
+
+PROFILE="${PROFILE:-full}"
+HEALTH_URL="${HEALTH_URL:-}"
 
 if [[ -z "$HEALTH_URL" ]]; then
   if [[ "$PROFILE" == "full" ]]; then
@@ -25,12 +192,18 @@ if [[ -z "$HEALTH_URL" ]]; then
   fi
 fi
 
-echo "Starting ELT Engine (profile: ${PROFILE})..."
-docker compose --profile "$PROFILE" up -d --build
+read -r -a COMPOSE_ARGS <<< "$(compose_files)"
+BUILD_ARGS=()
+if [[ "$DEV_BUILD" == true ]]; then
+  BUILD_ARGS=(--build)
+fi
+
+echo "Starting ELT Platform (profile: ${PROFILE})..."
+# shellcheck disable=SC2086
+docker compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file .env up -d "${BUILD_ARGS[@]}"
 
 if [[ "$PROFILE" == "frontend" ]]; then
   echo "Frontend profile started. Open http://localhost:${FRONTEND_PORT:-3000}"
-  echo "Ensure NEXT_PUBLIC_API_URL in .env points to your remote API before building."
   exit 0
 fi
 
@@ -46,7 +219,7 @@ for i in $(seq 1 60); do
     break
   fi
   if [[ "$i" -eq 60 ]]; then
-    echo "Health check timed out. Inspect logs with: docker compose --profile ${PROFILE} logs"
+    echo "Health check timed out. Inspect logs with: docker compose logs"
     exit 1
   fi
   sleep 2
@@ -54,12 +227,12 @@ done
 
 cat <<EOF
 
-ELT Engine is running (profile: ${PROFILE}).
+ELT Platform is running (profile: ${PROFILE}).
 
-  Full stack URL:  ${APP_URL:-http://localhost}
-  API (direct):    http://localhost:8000  (backend profile only)
+  Stack URL:       ${APP_URL:-http://localhost}
+  API (direct):    http://localhost:${API_PORT:-8000}
   Keycloak:        http://localhost:${KEYCLOAK_PORT:-8081}
-  Frontend direct: http://localhost:3000  (frontend profile only)
+  Infra service:   http://localhost:${INFRA_SERVICE_PORT:-9000}
 
 Database migrations run automatically when the API container starts.
 
