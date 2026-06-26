@@ -25,7 +25,7 @@ services:
     image: ${API_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-api:v1.0.0}
     restart: unless-stopped
     command: celery -A core.celery_app.celery_app worker --loglevel=info -Q celery,notifications
-    env_file: .env
+    env_file: ${ENV_FILE:-../.env}
     environment:
       <<: *api-env
     tmpfs:

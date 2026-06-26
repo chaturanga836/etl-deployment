@@ -80,6 +80,15 @@ env_file_path() {
   fi
 }
 
+resolve_env_file() {
+  local path
+  path="$(env_file_path)"
+  if [[ "$path" != /* ]]; then
+    path="$ROOT_DIR/$path"
+  fi
+  echo "$path"
+}
+
 docker_compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -196,7 +205,8 @@ ensure_env
 generate_secrets_if_missing
 production_guards
 
-EF="$(env_file_path)"
+EF="$(resolve_env_file)"
+export ENV_FILE="$EF"
 # shellcheck disable=SC1091
 set -a
 source "$EF"
