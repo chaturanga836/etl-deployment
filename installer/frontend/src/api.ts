@@ -5,6 +5,12 @@ export type Prerequisites = {
   compose: { available: boolean; version: string | null };
   helm: { available: boolean; version: string | null };
   kubectl: { available: boolean; version: string | null };
+  registry?: {
+    url: string;
+    api_image: string;
+    accessible: boolean | null;
+    local_build: boolean;
+  };
 };
 
 export type InstallDefaults = {

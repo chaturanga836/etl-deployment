@@ -196,6 +196,22 @@ export default function App() {
             {!prereqs?.docker.available && (
               <Alert type="warning" message="Docker must be installed on this server before you continue." style={{ marginTop: 16 }} />
             )}
+            {prereqs?.registry && prereqs.registry.accessible === false && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginTop: 16 }}
+                message="Cannot pull platform images from the registry"
+                description={
+                  <Text>
+                    Log in on this EC2 host, then retry install:{' '}
+                    <Text code>echo &quot;&lt;GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;github-user&gt; --password-stdin</Text>
+                    <br />
+                    Image: <Text code>{prereqs.registry.api_image}</Text>
+                  </Text>
+                }
+              />
+            )}
             {prereqs && (
               <Collapse
                 ghost
@@ -207,6 +223,18 @@ export default function App() {
                     <Space direction="vertical">
                       <Text>Docker: {prereqs.docker.available ? prereqs.docker.version : 'Not found'}</Text>
                       <Text>Compose: {prereqs.compose.available ? prereqs.compose.version : 'Not found'}</Text>
+                      {prereqs.registry && (
+                        <Text>
+                          Registry ({prereqs.registry.url}):{' '}
+                          {prereqs.registry.local_build
+                            ? 'local build'
+                            : prereqs.registry.accessible === true
+                              ? 'reachable'
+                              : prereqs.registry.accessible === false
+                                ? 'denied — docker login required'
+                                : 'not checked'}
+                        </Text>
+                      )}
                     </Space>
                   ),
                 }]}

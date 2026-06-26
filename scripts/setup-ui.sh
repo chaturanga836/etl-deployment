@@ -70,6 +70,13 @@ if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
   export INSTALLER_DEV_BUILD=true
   echo "Local source repos detected — wizard will build images from source instead of pulling from registry."
   echo ""
+else
+  registry_url="$(grep -E '^[[:space:]]*url:' VERSION 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+  registry_url="${registry_url:-ghcr.io/YOUR_GITHUB_ORG}"
+  echo "  Images will be pulled from ${registry_url}."
+  echo "  If the registry is private, log in on this host before you click Install:"
+  echo "    echo \"<GITHUB_PAT>\" | docker login ghcr.io -u <github-username> --password-stdin"
+  echo ""
 fi
 
 docker compose -f "${INSTALLER_COMPOSE[@]}" up --build "$@"
