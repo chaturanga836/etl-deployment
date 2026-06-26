@@ -37,6 +37,8 @@ python scripts/generate-license.py --customer-id acme-corp --days 365
 
 The API validates `LICENSE_KEY` at startup in production.
 
+**AI / troubleshooting reference:** [AI_REFERENCE.md](AI_REFERENCE.md) (installer host paths, license keypairs, Cython gotchas).
+
 The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
 ## Databases (bundled Postgres)

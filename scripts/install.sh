@@ -432,10 +432,11 @@ preflight_license_key() {
   local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
   local key_dir="${root}/config"
   if running_installer_with_docker_sock; then
+    # Volume paths are resolved on the host Docker daemon, not inside the installer container.
     docker run --rm \
       -v "${root}:/work:rw" \
-      -v "${ROOT_DIR}/scripts:/scripts:ro" \
-      -v "${ROOT_DIR}/installer:/installer:ro" \
+      -v "${root}/scripts:/scripts:ro" \
+      -v "${root}/installer:/installer:ro" \
       python:3.12-slim \
       sh -c 'pip install -q cryptography pyjwt >/dev/null && PYTHONPATH=/installer python3 /scripts/repair-license-keys.py --out-dir /work/config'
   elif command -v python3 >/dev/null 2>&1; then
