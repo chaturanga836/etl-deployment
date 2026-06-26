@@ -1,8 +1,8 @@
 # DT Orch Setup Installer — API + wizard UI
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-COPY installer/frontend/package.json ./
-RUN npm install
+COPY installer/frontend/package.json installer/frontend/package-lock.json ./
+RUN npm ci
 COPY installer/frontend/ ./
 RUN npm run build
 

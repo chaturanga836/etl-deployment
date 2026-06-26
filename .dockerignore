@@ -1,0 +1,7 @@
+.git
+**/__pycache__
+**/.venv
+
+# Host node_modules lack Linux execute bits and break npm scripts (tsc: Permission denied)
+installer/frontend/node_modules
+installer/frontend/dist
