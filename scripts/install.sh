@@ -89,6 +89,74 @@ resolve_env_file() {
   echo "$path"
 }
 
+maybe_enable_dev_build() {
+  if [[ "$DEV_BUILD" == true ]]; then
+    return 0
+  fi
+  case "${INSTALLER_DEV_BUILD:-}" in
+    1|true|TRUE|yes|YES)
+      DEV_BUILD=true
+      echo "INSTALLER_DEV_BUILD enabled — building images instead of pulling from registry."
+      return 0
+      ;;
+  esac
+  if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
+    DEV_BUILD=true
+    echo "Local source detected at ../etl-back — building images instead of pulling from registry."
+  fi
+}
+
+registry_login_if_configured() {
+  local registry="${REGISTRY_URL:-}"
+  local token="${REGISTRY_PASSWORD:-${REGISTRY_TOKEN:-${GITHUB_TOKEN:-}}}"
+  local user="${REGISTRY_USER:-}"
+
+  [[ -z "$registry" || -z "$token" ]] && return 0
+
+  local host="${registry%%/*}"
+  if [[ -z "$user" ]]; then
+    user="${GITHUB_USERNAME:-token}"
+  fi
+
+  echo "Logging in to container registry (${host})..."
+  if ! echo "$token" | docker login "$host" -u "$user" --password-stdin; then
+    echo "ERROR: Registry login failed for ${host}."
+    exit 1
+  fi
+}
+
+preflight_registry_access() {
+  if [[ "$DEV_BUILD" == true ]]; then
+    return 0
+  fi
+
+  local image="${API_IMAGE:-}"
+  [[ -z "$image" ]] && return 0
+
+  echo "Checking registry access for ${image}..."
+  if docker manifest inspect "$image" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  cat <<EOF
+ERROR: Cannot pull ${image} (registry denied or image not found).
+
+If images are in a private registry, authenticate on the Docker host before installing:
+  echo "<PAT>" | docker login ghcr.io -u <github-username> --password-stdin
+
+Or set in .env (optional):
+  REGISTRY_USER=<github-username>
+  REGISTRY_TOKEN=<github-pat-with-read:packages>
+
+To build from local sibling repos instead of pulling:
+  ./scripts/install.sh --dev --state-dir <state-dir> full
+
+For the setup wizard with local repos, run ./scripts/setup-ui.sh from a tree that includes
+etl-back, elt-frontend, and platform-infra-repo next to etl-deployment.
+EOF
+  exit 1
+}
+
 docker_compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -211,6 +279,10 @@ export ENV_FILE="$EF"
 set -a
 source "$EF"
 set +a
+
+maybe_enable_dev_build
+registry_login_if_configured
+preflight_registry_access
 
 if [[ -n "$ROLE" ]]; then
   echo "Ensuring Docker networks exist..."

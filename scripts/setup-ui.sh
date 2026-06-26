@@ -63,4 +63,13 @@ echo "================================================================"
 echo ""
 
 export INSTALLER_PORT INSTALLER_BIND INSTALLER_PUBLIC_HOST="$ACCESS_HOST"
-docker compose -f compose/installer.yml up --build "$@"
+
+INSTALLER_COMPOSE=(compose/installer.yml)
+if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
+  INSTALLER_COMPOSE+=(compose/installer.dev.yml)
+  export INSTALLER_DEV_BUILD=true
+  echo "Local source repos detected — wizard will build images from source instead of pulling from registry."
+  echo ""
+fi
+
+docker compose -f "${INSTALLER_COMPOSE[@]}" up --build "$@"

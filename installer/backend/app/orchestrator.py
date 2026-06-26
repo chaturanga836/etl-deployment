@@ -168,9 +168,13 @@ async def deploy_monolith(job: DeployJob, config: dict[str, Any]) -> str:
     env["STATE_DIR"] = str(STATE_DIR)
 
     install_sh = SCRIPTS_DIR / "install.sh"
+    install_args = ["bash", str(install_sh), "--state-dir", str(STATE_DIR)]
+    if os.getenv("INSTALLER_DEV_BUILD", "").lower() in ("1", "true", "yes"):
+        install_args.append("--dev")
+    install_args.append("full")
     code = await _stream_process(
         job,
-        ["bash", str(install_sh), "--state-dir", str(STATE_DIR), "full"],
+        install_args,
         cwd=DEPLOYMENT_ROOT,
         env=env,
     )
