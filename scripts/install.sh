@@ -429,25 +429,30 @@ EOF
 }
 
 preflight_license_key() {
-  local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
-  local key_dir="${root}/config"
+  local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
   if running_installer_with_docker_sock; then
     # Volume paths are resolved on the host Docker daemon, not inside the installer container.
     docker run --rm \
-      -v "${root}:/work:rw" \
-      -v "${root}/scripts:/scripts:ro" \
-      -v "${root}/installer:/installer:ro" \
+      -v "${host_root}:/work:rw" \
+      -v "${host_root}/scripts:/scripts:ro" \
+      -v "${host_root}/installer:/installer:ro" \
       python:3.12-slim \
       sh -c 'pip install -q cryptography pyjwt >/dev/null && PYTHONPATH=/installer python3 /scripts/repair-license-keys.py --out-dir /work/config'
   elif command -v python3 >/dev/null 2>&1; then
-    PYTHONPATH="${ROOT_DIR}/installer" python3 "${ROOT_DIR}/scripts/repair-license-keys.py" --out-dir "${key_dir}"
+    PYTHONPATH="${ROOT_DIR}/installer" python3 "${ROOT_DIR}/scripts/repair-license-keys.py" --out-dir "${host_root}/config"
   fi
-  if [[ ! -f "${key_dir}/license-public.pem" ]]; then
-    echo "ERROR: Missing ${key_dir}/license-public.pem"
-    echo "Run: python3 scripts/repair-license-keys.py --out-dir config"
-    echo "Or start the setup wizard once: ./scripts/setup-ui.sh"
-    exit 1
+  local pub="${host_root}/config/license-public.pem"
+  if running_installer_with_docker_sock; then
+    if docker run --rm -v "${host_root}:/mnt:ro" alpine:3.20 test -f "/mnt/config/license-public.pem"; then
+      return 0
+    fi
+  elif [[ -f "${ROOT_DIR}/config/license-public.pem" ]]; then
+    return 0
   fi
+  echo "ERROR: Missing ${pub}"
+  echo "Run: python3 scripts/repair-license-keys.py --out-dir config"
+  echo "Or start the setup wizard once: ./scripts/setup-ui.sh"
+  exit 1
 }
 
 prepare_runtime_env() {
