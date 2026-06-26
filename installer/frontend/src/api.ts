@@ -7,6 +7,26 @@ export type Prerequisites = {
   kubectl: { available: boolean; version: string | null };
 };
 
+export type HostInfo = {
+  public_ipv4: string | null;
+  public_dns: string | null;
+  local_hostname: string;
+  suggested_public_host: string;
+  installer_port: number;
+  platform_http_port: number;
+  installer_url: string;
+  platform_url: string;
+  security_group_ports: number[];
+};
+
+export type TrialLicense = {
+  license_key: string;
+  customer_id: string;
+  edition: string;
+  expires_at: string | null;
+  trial_days: number;
+};
+
 export type WizardState = {
   deployment_mode: 'monolith' | 'distributed' | 'kubernetes';
   registry_url: string;
@@ -91,6 +111,20 @@ export const defaultWizard: WizardState = {
     remote_path: '/opt/etl-deployment',
   },
 };
+
+export async function fetchHostInfo(): Promise<HostInfo> {
+  const r = await fetch(`${API}/host-info`);
+  return r.json();
+}
+
+export async function requestTrialLicense(): Promise<TrialLicense> {
+  const r = await fetch(`${API}/license/trial`, { method: 'POST' });
+  if (!r.ok) {
+    const err = await r.json();
+    throw new Error(err.detail || 'Could not start trial');
+  }
+  return r.json();
+}
 
 export async function fetchPrerequisites(): Promise<Prerequisites> {
   const r = await fetch(`${API}/prerequisites`);

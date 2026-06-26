@@ -17,8 +17,9 @@ _SHARED = Path(__file__).resolve().parents[2] / "shared"
 if str(_SHARED.parent) not in sys.path:
     sys.path.insert(0, str(_SHARED.parent))
 
-from shared.license import validate_license_key  # noqa: E402
+from shared.license import issue_trial_license, resolve_license_key, validate_license_key  # noqa: E402
 
+from app.host_info import detect_public_host
 from app.jobs import JobStatus, create_job, get_job
 from app.orchestrator import STATE_DIR, run_deploy_job
 from app.prerequisites import check_prerequisites
@@ -47,7 +48,7 @@ class DeployRequest(BaseModel):
     superadmin_username: str = Field(..., min_length=3)
     superadmin_password: str = Field(..., min_length=8)
     superadmin_email: str | None = None
-    license_key: str
+    license_key: str = ""
     database: dict[str, Any] = Field(default_factory=dict)
     monolith: dict[str, Any] = Field(default_factory=dict)
     distributed: dict[str, Any] = Field(default_factory=dict)
@@ -94,6 +95,27 @@ def validate_database(body: DatabaseValidateRequest) -> dict[str, str]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/host-info")
+def host_info() -> dict[str, Any]:
+    return detect_public_host()
+
+
+@router.post("/license/trial")
+def create_trial_license() -> dict[str, Any]:
+    try:
+        token = issue_trial_license()
+        info = validate_license_key(token)
+        return {
+            "license_key": token,
+            "customer_id": info.customer_id,
+            "edition": info.edition,
+            "expires_at": info.expires_at.isoformat() if info.expires_at else None,
+            "trial_days": 90,
+        }
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/validate/license")
 def validate_license(body: LicenseValidateRequest) -> dict[str, Any]:
     try:
@@ -111,12 +133,13 @@ def validate_license(body: LicenseValidateRequest) -> dict[str, Any]:
 @router.post("/deploy")
 async def start_deploy(body: DeployRequest) -> dict[str, str]:
     try:
-        validate_license_key(body.license_key)
+        license_key = resolve_license_key(body.license_key)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job = create_job()
     payload = body.model_dump()
+    payload["license_key"] = license_key
     asyncio.create_task(run_deploy_job(job, payload))
     return {"job_id": job.id}
 

@@ -17,11 +17,14 @@ import {
 } from 'antd';
 import {
   defaultWizard,
+  fetchHostInfo,
   fetchInstallState,
   fetchPrerequisites,
+  requestTrialLicense,
   startDeploy,
   validateDatabase,
   validateLicense,
+  type HostInfo,
   type Prerequisites,
   type WizardState,
 } from './api';
@@ -47,6 +50,8 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [wizard, setWizard] = useState<WizardState>(defaultWizard);
   const [prereqs, setPrereqs] = useState<Prerequisites | null>(null);
+  const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
+  const [trialInfo, setTrialInfo] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [loginUrl, setLoginUrl] = useState('');
   const [deployError, setDeployError] = useState('');
@@ -65,6 +70,24 @@ export default function App() {
 
   useEffect(() => {
     fetchPrerequisites().then(setPrereqs).catch(() => message.error('Could not load prerequisites'));
+    fetchHostInfo().then((info) => {
+      setHostInfo(info);
+      setWizard((w) => ({
+        ...w,
+        monolith: {
+          ...w.monolith,
+          public_host: w.monolith.public_host === 'localhost'
+            ? info.suggested_public_host
+            : w.monolith.public_host,
+        },
+        kubernetes: {
+          ...w.kubernetes,
+          ingress_host: w.kubernetes.ingress_host === 'studio.example.com'
+            ? info.suggested_public_host
+            : w.kubernetes.ingress_host,
+        },
+      }));
+    }).catch(() => {});
     fetchInstallState().then((s) => {
       if (s.installed) {
         setAlreadyInstalled(s);
@@ -117,8 +140,33 @@ export default function App() {
         return (
           <Card title="Welcome to DT Orch Setup">
             <Paragraph>
-              This wizard guides you through installing DT Orch: super admin account, database,
-              license, and deployment.
+              Configure and install DT Orch entirely in this wizard. You do not need to edit
+              <Text code>.env</Text> files manually — settings are saved and applied when you click Install.
+            </Paragraph>
+            {hostInfo && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="Open this setup page"
+                description={
+                  <Space direction="vertical">
+                    <Text>
+                      Installer URL: <Link href={hostInfo.installer_url} target="_blank" rel="noreferrer">{hostInfo.installer_url}</Link>
+                    </Text>
+                    <Text type="secondary">
+                      After install, the platform will be at {hostInfo.platform_url}
+                    </Text>
+                    <Text type="secondary">
+                      EC2 security group: allow inbound TCP {hostInfo.security_group_ports.join(' and ')}
+                    </Text>
+                  </Space>
+                }
+              />
+            )}
+            <Paragraph>
+              Steps: choose deployment target → registry → super admin → database → license (optional trial) →
+              host settings → review → one-click install.
             </Paragraph>
             {prereqs && (
               <Space direction="vertical">
@@ -214,19 +262,40 @@ export default function App() {
         );
       case 5:
         return (
-          <Card title="License key">
+          <Card title="License">
+            <Paragraph>
+              Start a <Text strong>3-month free trial</Text> or paste a license key from your vendor.
+              If you skip this step, a trial license is applied automatically at install time.
+            </Paragraph>
             <Form layout="vertical">
-              <Form.Item label="Signed license key" required>
-                <Input.TextArea rows={4} value={wizard.license_key} onChange={(e) => update({ license_key: e.target.value })} />
+              <Space style={{ marginBottom: 16 }}>
+                <Button type="primary" onClick={async () => {
+                  try {
+                    const trial = await requestTrialLicense();
+                    update({ license_key: trial.license_key });
+                    setTrialInfo(`Trial active until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
+                    message.success(`3-month trial started (${trial.customer_id})`);
+                  } catch (e) {
+                    message.error(e instanceof Error ? e.message : 'Trial failed');
+                  }
+                }}>
+                  Start 3-month trial
+                </Button>
+                {trialInfo && <Text type="success">{trialInfo}</Text>}
+              </Space>
+              <Form.Item label="License key (optional if using trial)">
+                <Input.TextArea rows={4} value={wizard.license_key} onChange={(e) => update({ license_key: e.target.value })} placeholder="Leave empty to auto-apply trial at install" />
               </Form.Item>
-              <Button onClick={async () => {
-                try {
-                  const info = await validateLicense(wizard.license_key);
-                  message.success(`Valid — customer ${info.customer_id}, edition ${info.edition}`);
-                } catch (e) {
-                  message.error(e instanceof Error ? e.message : 'Invalid');
-                }
-              }}>Validate license</Button>
+              {wizard.license_key && (
+                <Button onClick={async () => {
+                  try {
+                    const info = await validateLicense(wizard.license_key);
+                    message.success(`Valid — customer ${info.customer_id}, edition ${info.edition}`);
+                  } catch (e) {
+                    message.error(e instanceof Error ? e.message : 'Invalid');
+                  }
+                }}>Validate license</Button>
+              )}
             </Form>
           </Card>
         );
@@ -235,7 +304,7 @@ export default function App() {
           return (
             <Card title="Monolith settings">
               <Form layout="vertical">
-                <Form.Item label="Public host">
+                <Form.Item label="Public host" extra="Detected from this server; used for login URLs after install">
                   <Input value={wizard.monolith.public_host} onChange={(e) => update({ monolith: { ...wizard.monolith, public_host: e.target.value } })} />
                 </Form.Item>
                 <Form.Item label="HTTP port">
@@ -303,7 +372,7 @@ export default function App() {
                 registry: wizard.registry_url,
                 superadmin: wizard.superadmin_username,
                 database: wizard.database.source,
-                license: wizard.license_key ? '(set)' : '(missing)',
+                license: wizard.license_key ? '(set)' : '(3-month trial at install)',
               }, null, 2)}
             </pre>
             <Button type="primary" size="large" onClick={runDeploy} style={{ marginTop: 16 }}>

@@ -15,25 +15,29 @@ This repo is the **official install surface** for **DT Orch** (self-hosted BaaS)
 
 ## Setup wizard (recommended)
 
-The guided installer collects super admin credentials, database settings (bundled or external), license key, and deployment target, then deploys with **live log output** in the browser.
+The guided installer is a **browser UI** — no manual `.env` editing. Collect super admin credentials, database settings, license (or 3-month trial), and deployment target, then deploy with **live log output** in the browser.
 
 ```bash
 ./scripts/setup-ui.sh
-# Open http://127.0.0.1:9080
+# Script prints the browser URL (EC2 public DNS/IP when available)
 ```
 
-Wizard steps: Welcome → Deployment target (monolith / distributed / Kubernetes) → Registry → Super Admin → Database → License → Target config → Review → Deploy → Login URL.
+Open the URL shown in the terminal (default port **9080**). On AWS EC2, allow inbound **TCP 9080** (wizard) and **TCP 80** (platform after install) in the security group.
 
-**License keys** (signed offline JWT):
+Wizard steps: Welcome → Deployment target (monolith / distributed / Kubernetes) → Registry → Super Admin → Database → License (optional trial) → Target config → Review → **Install** → Login URL.
+
+**License:** click **Start 3-month trial** in the wizard, or paste a vendor key. If you skip the license step, a trial is issued automatically at install time.
+
+**Vendor license keys** (signed offline JWT):
 
 ```bash
 python scripts/generate-license-keys.py    # once (vendor)
 python scripts/generate-license.py --customer-id acme-corp --days 365
 ```
 
-Paste the output token into the License step. The API validates the same key at startup in production (`LICENSE_KEY`).
+The API validates `LICENSE_KEY` at startup in production.
 
-The installer binds to **127.0.0.1:9080** only and mounts the Docker socket — do not expose it to the public internet.
+The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
 ## Databases (bundled Postgres)
 

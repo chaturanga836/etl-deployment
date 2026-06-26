@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import os
+import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import jwt
+from cryptography.hazmat.primitives import serialization
 
 _DEFAULT_PUBLIC_KEY = Path(__file__).resolve().parents[2] / "config" / "license-public.pem"
+_DEFAULT_PRIVATE_KEY = Path(__file__).resolve().parents[2] / "config" / "license-private.pem"
+TRIAL_DAYS = 90
 
 
 @dataclass
@@ -27,6 +31,54 @@ def _public_key_path() -> Path:
     if env:
         return Path(env)
     return _DEFAULT_PUBLIC_KEY
+
+
+def _private_key_path() -> Path:
+    env = os.getenv("LICENSE_PRIVATE_KEY_PATH")
+    if env:
+        return Path(env)
+    deploy_root = os.getenv("ETL_DEPLOYMENT_ROOT")
+    if deploy_root:
+        candidate = Path(deploy_root) / "config" / "license-private.pem"
+        if candidate.is_file():
+            return candidate
+    return _DEFAULT_PRIVATE_KEY
+
+
+def _load_private_key():
+    path = _private_key_path()
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"License private key not found: {path}. "
+            "Run scripts/generate-license-keys.py on the host first."
+        )
+    return serialization.load_pem_private_key(path.read_bytes(), password=None)
+
+
+def issue_trial_license(*, customer_id: str | None = None, days: int = TRIAL_DAYS) -> str:
+    """Issue a signed trial license JWT (self-host / PoC installs)."""
+    private_key = _load_private_key()
+    now = datetime.now(timezone.utc)
+    sub = customer_id or f"trial-{uuid.uuid4().hex[:12]}"
+    claims = {
+        "sub": sub,
+        "edition": "trial",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(days=days)).timestamp()),
+        "max_workspaces": 3,
+    }
+    return jwt.encode(claims, private_key, algorithm="RS256")
+
+
+def resolve_license_key(key: str | None) -> str:
+    """Return a valid license key, issuing a trial when none was provided."""
+    key = (key or "").strip()
+    if key:
+        validate_license_key(key)
+        return key
+    trial = issue_trial_license()
+    validate_license_key(trial)
+    return trial
 
 
 def _load_public_key() -> str:
