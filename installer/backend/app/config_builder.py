@@ -43,6 +43,7 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
             "email": wizard.get("superadmin_email"),
         },
         "license": {"key": wizard["license_key"]},
+        "deploy_env": wizard.get("deploy_env", "development"),
     }
 
     if source == "external":

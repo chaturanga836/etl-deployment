@@ -182,6 +182,25 @@ preflight_license_key() {
   fi
 }
 
+prepare_runtime_env() {
+  local ef="$1"
+  local deploy_env="${DTORCH_ENV:-${ELT_ENV:-development}}"
+  if [[ "$deploy_env" != "production" && -f "$ef" ]]; then
+    # Development installs must not inject LICENSE_KEY — mismatched keys crash API startup.
+    sed -i.bak '/^LICENSE_KEY=/d' "$ef"
+    rm -f "${ef}.bak"
+  fi
+}
+
+show_api_failure_logs() {
+  if docker ps -a --format '{{.Names}}' | grep -qx 'dt-orch-api'; then
+    echo ""
+    echo "---- dt-orch-api logs (last 60 lines) ----"
+    docker logs dt-orch-api --tail 60 2>&1 || true
+    echo "----------------------------------------"
+  fi
+}
+
 docker_compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -309,6 +328,7 @@ maybe_enable_dev_build
 registry_login_if_configured
 preflight_registry_access
 preflight_license_key
+prepare_runtime_env "$EF"
 
 if [[ -n "$ROLE" ]]; then
   echo "Ensuring Docker networks exist..."
@@ -351,7 +371,10 @@ fi
 
 echo "Starting DT Orch (profile: ${PROFILE})..."
 # shellcheck disable=SC2086
-docker_compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"
+if ! docker_compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"; then
+  show_api_failure_logs
+  exit 1
+fi
 
 if [[ "$PROFILE" == "frontend" ]]; then
   echo "Frontend profile started. Open http://localhost:${FRONTEND_PORT:-3000}"
@@ -364,13 +387,14 @@ if [[ "$PROFILE" == "auth" ]]; then
 fi
 
 echo "Waiting for API health at ${HEALTH_URL}..."
-for i in $(seq 1 60); do
+for i in $(seq 1 90); do
   if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
     echo "Health check passed."
     break
   fi
-  if [[ "$i" -eq 60 ]]; then
+  if [[ "$i" -eq 90 ]]; then
     echo "Health check timed out. Inspect logs with: docker compose logs (or docker-compose logs)"
+    show_api_failure_logs
     exit 1
   fi
   sleep 2

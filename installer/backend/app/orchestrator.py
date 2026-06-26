@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -101,6 +102,17 @@ def _render_config(job: DeployJob, config: dict[str, Any]) -> Path:
     env_file = STATE_DIR / ".env"
     if env_file.is_file():
         os.chmod(env_file, 0o600)
+
+    license_key = (config.get("license") or {}).get("key", "").strip()
+    if license_key:
+        license_path = STATE_DIR / "license.key"
+        license_path.write_text(license_key, encoding="utf-8")
+        os.chmod(license_path, 0o600)
+
+    public_key = DEPLOYMENT_ROOT / "config" / "license-public.pem"
+    if public_key.is_file():
+        shutil.copy2(public_key, STATE_DIR / "license-public.pem")
+
     return env_file
 
 

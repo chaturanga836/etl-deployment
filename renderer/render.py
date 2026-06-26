@@ -221,12 +221,13 @@ def render_env(config: dict[str, Any]) -> str:
         ])
 
     license_key = config.get("license", {}).get("key", "")
+    deploy_env = config.get("deploy_env", "development")
     bootstrap_token = secrets.token_hex(32)
     superadmin = config.get("superadmin", {})
     super_email = superadmin.get("email") or f"{superadmin.get('username', 'admin')}@users.local"
 
     lines.extend([
-        _env_line("LICENSE_KEY", license_key),
+        _env_line("DTORCH_ENV", deploy_env),
         "LICENSE_PUBLIC_KEY_PATH=/etc/dt-orch/license-public.pem",
         "DTORCH_SETUP_COMPLETE=false",
         f"INSTALL_BOOTSTRAP_TOKEN={bootstrap_token}",
@@ -234,6 +235,13 @@ def render_env(config: dict[str, Any]) -> str:
         _env_line("SUPERADMIN_EMAIL", super_email),
         "",
     ])
+    if deploy_env == "production":
+        lines.append(_env_line("LICENSE_KEY", license_key))
+    else:
+        lines.append(
+            "# LICENSE_KEY omitted in development — API starts without offline license gate; "
+            "installer records trial/license separately."
+        )
 
     return "\n".join(lines) + "\n"
 
