@@ -7,8 +7,8 @@ cd "$ROOT_DIR"
 INSTALLER_PORT="${INSTALLER_PORT:-3000}"
 INSTALLER_BIND="${INSTALLER_BIND:-0.0.0.0}"
 
-if [[ ! -f config/license-public.pem ]]; then
-  echo "Generating license key pair (enables 3-month trial licenses)..."
+if [[ ! -f config/license-public.pem || ! -f config/license-private.pem ]]; then
+  echo "Generating license key pair (required for free trials)..."
   python3 scripts/generate-license-keys.py --out-dir config
 fi
 

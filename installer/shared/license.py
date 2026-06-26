@@ -11,10 +11,60 @@ from typing import Any
 
 import jwt
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-_DEFAULT_PUBLIC_KEY = Path(__file__).resolve().parents[2] / "config" / "license-public.pem"
-_DEFAULT_PRIVATE_KEY = Path(__file__).resolve().parents[2] / "config" / "license-private.pem"
 TRIAL_DAYS = 90
+
+
+def _state_dir() -> Path:
+    return Path(os.getenv("INSTALLER_STATE_DIR", "/opt/etl-deployment-state"))
+
+
+def _deployment_config_dir() -> Path:
+    root = os.getenv("ETL_DEPLOYMENT_ROOT")
+    if root:
+        return Path(root) / "config"
+    return Path(__file__).resolve().parents[2] / "config"
+
+
+def _generate_keypair(directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub = key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    (directory / "license-private.pem").write_bytes(priv)
+    (directory / "license-public.pem").write_bytes(pub)
+    try:
+        os.chmod(directory / "license-private.pem", 0o600)
+    except OSError:
+        pass
+
+
+def _license_key_directory() -> Path:
+    """Return directory containing a usable private+public license keypair."""
+    config_dir = _deployment_config_dir()
+    if (config_dir / "license-private.pem").is_file() and (config_dir / "license-public.pem").is_file():
+        return config_dir
+
+    state_dir = _state_dir()
+    if (state_dir / "license-private.pem").is_file() and (state_dir / "license-public.pem").is_file():
+        return state_dir
+
+    try:
+        _generate_keypair(state_dir)
+        return state_dir
+    except OSError as exc:
+        raise FileNotFoundError(
+            "Could not create license keys for free trial. "
+            "On the server run: python3 scripts/generate-license-keys.py --out-dir config"
+        ) from exc
 
 
 @dataclass
@@ -27,30 +77,40 @@ class LicenseInfo:
 
 
 def _public_key_path() -> Path:
-    env = os.getenv("LICENSE_PUBLIC_KEY_PATH")
-    if env:
-        return Path(env)
-    return _DEFAULT_PUBLIC_KEY
+    env_pub = os.getenv("LICENSE_PUBLIC_KEY_PATH")
+    env_priv = os.getenv("LICENSE_PRIVATE_KEY_PATH")
+    if (
+        env_pub
+        and env_priv
+        and Path(env_pub).is_file()
+        and Path(env_priv).is_file()
+    ):
+        return Path(env_pub)
+    return _license_key_directory() / "license-public.pem"
 
 
 def _private_key_path() -> Path:
-    env = os.getenv("LICENSE_PRIVATE_KEY_PATH")
-    if env:
-        return Path(env)
-    deploy_root = os.getenv("ETL_DEPLOYMENT_ROOT")
-    if deploy_root:
-        candidate = Path(deploy_root) / "config" / "license-private.pem"
-        if candidate.is_file():
-            return candidate
-    return _DEFAULT_PRIVATE_KEY
+    env_pub = os.getenv("LICENSE_PUBLIC_KEY_PATH")
+    env_priv = os.getenv("LICENSE_PRIVATE_KEY_PATH")
+    if (
+        env_pub
+        and env_priv
+        and Path(env_pub).is_file()
+        and Path(env_priv).is_file()
+    ):
+        return Path(env_priv)
+    return _license_key_directory() / "license-private.pem"
 
 
 def _load_private_key():
     path = _private_key_path()
     if not path.is_file():
+        _license_key_directory()
+        path = _private_key_path()
+    if not path.is_file():
         raise FileNotFoundError(
             f"License private key not found: {path}. "
-            "Run scripts/generate-license-keys.py on the host first."
+            "On the server run: python3 scripts/generate-license-keys.py --out-dir config"
         )
     return serialization.load_pem_private_key(path.read_bytes(), password=None)
 
@@ -83,6 +143,9 @@ def resolve_license_key(key: str | None) -> str:
 
 def _load_public_key() -> str:
     path = _public_key_path()
+    if not path.is_file():
+        _license_key_directory()
+        path = _public_key_path()
     if not path.is_file():
         raise FileNotFoundError(f"License public key not found: {path}")
     return path.read_text(encoding="utf-8")
