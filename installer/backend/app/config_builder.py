@@ -56,7 +56,7 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
             "use_proxy": mono.get("use_proxy", True),
             "ports": {
                 "http": int(mono.get("http_port", 80)),
-                "frontend": int(mono.get("frontend_port", 3000)),
+                "frontend": int(mono.get("frontend_port", 3001)),
                 "api": int(mono.get("api_port", 8000)),
                 "keycloak": int(mono.get("keycloak_port", 8081)),
             },

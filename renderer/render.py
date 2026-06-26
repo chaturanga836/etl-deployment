@@ -111,7 +111,7 @@ def render_env(config: dict[str, Any]) -> str:
         ports = mono.get("ports", {})
         http_port = ports.get("http", 80)
         api_port = ports.get("api", 8000)
-        frontend_port = ports.get("frontend", 3000)
+        frontend_port = ports.get("frontend", 3001)
         keycloak_port = ports.get("keycloak", 8081)
 
         app_url = _public_base_url(host, http_port, use_proxy)

@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 import httpx
 
 from app.config_builder import build_deployment_config
+from app.deploy_phases import phase_from_log_line
 from app.jobs import DeployJob, JobStatus
 
 DEPLOYMENT_ROOT = Path(os.getenv("ETL_DEPLOYMENT_ROOT", "/opt/etl-deployment"))
@@ -56,8 +57,33 @@ async def _stream_process(job: DeployJob, cmd: list[str], *, cwd: Path, env: dic
         line = await proc.stdout.readline()
         if not line:
             break
-        job.push_log(line.decode("utf-8", errors="replace"), prefix=prefix)
+        text = line.decode("utf-8", errors="replace")
+        job.push_log(text, prefix=prefix)
+        if not prefix:
+            log_phase = phase_from_log_line(text)
+            if log_phase:
+                job.push_phase(
+                    log_phase["key"],
+                    label=log_phase["label"],
+                    progress=log_phase["progress"],
+                )
     return await proc.wait()
+
+
+async def _free_installer_port(job: DeployJob) -> None:
+    """Stop setup wizard container so monolith services can bind host ports."""
+    job.push_phase("prepare")
+    job.push_log("Stopping setup wizard to free ports for the platform...")
+    for cmd in (
+        ["docker", "stop", "dt-orch-installer"],
+        ["docker", "rm", "dt-orch-installer"],
+    ):
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
 
 
 def _render_config(job: DeployJob, config: dict[str, Any]) -> Path:
@@ -106,11 +132,13 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
     super_script = SCRIPTS_DIR / "bootstrap-superadmin.py"
 
     py = sys.executable
+    job.push_phase("bootstrap_keycloak")
     code = await _stream_process(job, [py, str(realm_script)], cwd=DEPLOYMENT_ROOT, env={**os.environ, **env})
     if code != 0:
         raise RuntimeError("Keycloak realm bootstrap failed")
 
     superadmin = config["superadmin"]
+    job.push_phase("bootstrap_admin")
     code = await _stream_process(
         job,
         [
@@ -168,6 +196,7 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
 
 async def deploy_monolith(job: DeployJob, config: dict[str, Any]) -> str:
     env_path = _render_config(job, config)
+    await _free_installer_port(job)
     job.push_phase("deploy")
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_path)
@@ -326,6 +355,7 @@ async def deploy_kubernetes(job: DeployJob, config: dict[str, Any]) -> str:
 
 async def run_deploy_job(job: DeployJob, wizard: dict[str, Any]) -> None:
     job.status = JobStatus.RUNNING
+    job.push_phase("starting")
     try:
         config = build_deployment_config(wizard)
         mode = config["mode"]
@@ -345,6 +375,7 @@ async def run_deploy_job(job: DeployJob, wizard: dict[str, Any]) -> None:
         }
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         (STATE_DIR / "install-state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+        job.push_phase("complete")
         job.complete(login_url)
     except Exception as exc:
         job.fail(str(exc))

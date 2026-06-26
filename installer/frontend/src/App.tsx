@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Progress,
   Button,
   Card,
   Collapse,
@@ -567,7 +568,19 @@ export default function App() {
         return (
           <Card title="Installing…">
             <Paragraph>Please wait while DT Orch is installed. This may take several minutes.</Paragraph>
-            {phase && <Alert message={`Step: ${phase}`} type="info" style={{ marginBottom: 12 }} />}
+            {phase.label && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text strong>Stage: {phase.label}</Text>
+                  <Text type="secondary">{phase.progress}%</Text>
+                </div>
+                <Progress
+                  percent={phase.progress}
+                  status={deployError ? 'exception' : phase.progress >= 100 ? 'success' : 'active'}
+                  showInfo={false}
+                />
+              </div>
+            )}
             {deployError && <Alert message={deployError} type="error" style={{ marginBottom: 12 }} />}
             <div style={{
               background: '#1e1e1e',

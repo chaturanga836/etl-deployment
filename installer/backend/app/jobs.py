@@ -32,8 +32,17 @@ class DeployJob:
         self.log_lines.append(text)
         self.events.put_nowait({"event": "log", "data": text})
 
-    def push_phase(self, phase: str) -> None:
-        self.events.put_nowait({"event": "phase", "data": phase})
+    def push_phase(
+        self,
+        phase: str,
+        *,
+        label: str | None = None,
+        progress: int | None = None,
+    ) -> None:
+        from app.deploy_phases import phase_payload
+
+        payload = phase_payload(phase, label=label, progress=progress)
+        self.events.put_nowait({"event": "phase", "data": payload})
 
     def complete(self, login_url: str) -> None:
         self.status = JobStatus.SUCCEEDED

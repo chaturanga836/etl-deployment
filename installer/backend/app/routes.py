@@ -188,7 +188,7 @@ async def deploy_events(job_id: str):
                 item = await asyncio.wait_for(job.events.get(), timeout=1.0)
                 yield {
                     "event": item.get("event", "log"),
-                    "data": json.dumps(item.get("data")) if not isinstance(item.get("data"), str) else item["data"],
+                    "data": json.dumps(item["data"]) if isinstance(item.get("data"), dict) else item.get("data", ""),
                 }
             except asyncio.TimeoutError:
                 if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
