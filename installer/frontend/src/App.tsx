@@ -33,22 +33,47 @@ import {
   type WizardState,
 } from './api';
 import { useDeployEvents } from './useDeployEvents';
+import InstallerBrand from './components/InstallerBrand';
+import { BRAND_NAME } from './constants/brand';
+import './App.css';
 
 const { Header, Content } = Layout;
-const { Title, Paragraph, Text, Link } = Typography;
+const { Paragraph, Text, Link } = Typography;
 
-/** User-visible steps (internal step 2 = packages, skipped in navigation). */
+const MIN_USERNAME_LENGTH = 3;
+const MIN_PASSWORD_LENGTH = 8;
+
+/** Compact step labels — full titles are shown on each card. */
 const USER_STEP_LABELS = [
   'Welcome',
-  'Install type',
-  'Your account',
+  'Type',
+  'Account',
   'Database',
   'License',
-  'Web address',
+  'Website',
   'Confirm',
   'Installing',
   'Done',
 ];
+
+function isAccountStepValid(wizard: WizardState): boolean {
+  return (
+    wizard.superadmin_username.trim().length >= MIN_USERNAME_LENGTH
+    && wizard.superadmin_password.length >= MIN_PASSWORD_LENGTH
+  );
+}
+
+function isDatabaseStepValid(wizard: WizardState, dbValidated: boolean): boolean {
+  if (wizard.database.source === 'bundled') {
+    return true;
+  }
+  const { host, user, password } = wizard.database;
+  return Boolean(host.trim() && user.trim() && password) && dbValidated;
+}
+
+function isWebsiteStepValid(wizard: WizardState): boolean {
+  return wizard.monolith.public_host.trim().length > 0;
+}
 
 function userStepIndex(internal: number): number {
   return internal <= 1 ? internal : internal - 1;
@@ -75,6 +100,8 @@ export default function App() {
   const [deployError, setDeployError] = useState('');
   const [alreadyInstalled, setAlreadyInstalled] = useState<{ login_url?: string } | null>(null);
   const [prereqsLoading, setPrereqsLoading] = useState(false);
+  const [dbValidated, setDbValidated] = useState(false);
+  const [accountTouched, setAccountTouched] = useState(false);
 
   const refreshPrereqs = useCallback(async () => {
     setPrereqsLoading(true);
@@ -139,6 +166,29 @@ export default function App() {
   const update = (patch: Partial<WizardState>) => setWizard((w) => ({ ...w, ...patch }));
 
   const next = async () => {
+    if (step === 3) {
+      setAccountTouched(true);
+      if (!isAccountStepValid(wizard)) {
+        message.warning(
+          `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
+        );
+        return;
+      }
+    }
+    if (step === 4) {
+      if (!isDatabaseStepValid(wizard, dbValidated)) {
+        if (wizard.database.source === 'external') {
+          message.warning('Fill in database connection details and click Test connection before continuing.');
+        }
+        return;
+      }
+    }
+    if (step === 6 && wizard.deployment_mode === 'monolith') {
+      if (!isWebsiteStepValid(wizard)) {
+        message.warning('Enter the website address people will use to open DT Orch.');
+        return;
+      }
+    }
     if (step === 5 && licenseMode === 'trial') {
       try {
         const trial = await requestTrialLicense();
@@ -153,7 +203,12 @@ export default function App() {
     setStep((s) => skipPackagesStep(s, 1));
   };
 
-  const nextDisabled = step === 5 && licenseMode === 'license' && !licenseValidated;
+  const nextDisabled = (
+    (step === 3 && !isAccountStepValid(wizard))
+    || (step === 4 && !isDatabaseStepValid(wizard, dbValidated))
+    || (step === 5 && licenseMode === 'license' && !licenseValidated)
+    || (step === 6 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
+  );
 
   const back = () => setStep((s) => skipPackagesStep(s, -1));
 
@@ -171,8 +226,10 @@ export default function App() {
   const testDb = async () => {
     try {
       await validateDatabase(wizard.database);
+      setDbValidated(true);
       message.success('Database connection successful');
     } catch (e) {
+      setDbValidated(false);
       message.error(e instanceof Error ? e.message : 'Connection failed');
     }
   };
@@ -185,8 +242,9 @@ export default function App() {
       case 0:
         return (
           <Card title="Welcome">
-            <Paragraph>
-              This guide will install <Text strong>DT Orch</Text>
+            <InstallerBrand variant="hero" showTagline />
+            <Paragraph style={{ marginTop: 16 }}>
+              This guide will install <Text strong>{BRAND_NAME}</Text>
               {installDefaults ? ` version ${installDefaults.platform_version}` : ''} on this server.
               Answer a few questions, then click <Text strong>Install</Text>.
             </Paragraph>
@@ -349,15 +407,67 @@ export default function App() {
             <Paragraph type="secondary">
               You will use this to sign in after installation.
             </Paragraph>
-            <Form layout="vertical">
-              <Form.Item label="Username" required>
-                <Input value={wizard.superadmin_username} onChange={(e) => update({ superadmin_username: e.target.value })} />
+            <Form
+              layout="vertical"
+              onFinish={() => {
+                setAccountTouched(true);
+                if (!isAccountStepValid(wizard)) {
+                  message.warning(
+                    `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
+                  );
+                  return;
+                }
+                void next();
+              }}
+            >
+              <Form.Item
+                label="Username"
+                required
+                validateStatus={
+                  accountTouched && wizard.superadmin_username.trim().length < MIN_USERNAME_LENGTH
+                    ? 'error'
+                    : undefined
+                }
+                help={
+                  accountTouched && wizard.superadmin_username.trim().length < MIN_USERNAME_LENGTH
+                    ? `Username must be at least ${MIN_USERNAME_LENGTH} characters.`
+                    : undefined
+                }
+              >
+                <Input
+                  value={wizard.superadmin_username}
+                  onChange={(e) => update({ superadmin_username: e.target.value })}
+                  onBlur={() => setAccountTouched(true)}
+                  autoComplete="username"
+                />
               </Form.Item>
-              <Form.Item label="Password" required>
-                <Input.Password value={wizard.superadmin_password} onChange={(e) => update({ superadmin_password: e.target.value })} />
+              <Form.Item
+                label="Password"
+                required
+                validateStatus={
+                  accountTouched && wizard.superadmin_password.length < MIN_PASSWORD_LENGTH
+                    ? 'error'
+                    : undefined
+                }
+                help={
+                  accountTouched && wizard.superadmin_password.length < MIN_PASSWORD_LENGTH
+                    ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
+                    : undefined
+                }
+              >
+                <Input.Password
+                  value={wizard.superadmin_password}
+                  onChange={(e) => update({ superadmin_password: e.target.value })}
+                  onBlur={() => setAccountTouched(true)}
+                  autoComplete="new-password"
+                />
               </Form.Item>
               <Form.Item label="Email (optional)">
-                <Input value={wizard.superadmin_email} onChange={(e) => update({ superadmin_email: e.target.value })} />
+                <Input
+                  value={wizard.superadmin_email}
+                  onChange={(e) => update({ superadmin_email: e.target.value })}
+                  autoComplete="email"
+                />
               </Form.Item>
             </Form>
           </Card>
@@ -367,7 +477,10 @@ export default function App() {
           <Card title="Database">
             <Radio.Group
               value={wizard.database.source}
-              onChange={(e) => update({ database: { ...wizard.database, source: e.target.value } })}
+              onChange={(e) => {
+                setDbValidated(false);
+                update({ database: { ...wizard.database, source: e.target.value } });
+              }}
               style={{ marginBottom: 16 }}
             >
               <Space direction="vertical">
@@ -383,19 +496,52 @@ export default function App() {
             </Radio.Group>
             {wizard.database.source === 'external' && (
               <Form layout="vertical">
-                <Form.Item label="Host">
-                  <Input value={wizard.database.host} onChange={(e) => update({ database: { ...wizard.database, host: e.target.value } })} />
+                <Form.Item label="Host" required>
+                  <Input
+                    value={wizard.database.host}
+                    onChange={(e) => {
+                      setDbValidated(false);
+                      update({ database: { ...wizard.database, host: e.target.value } });
+                    }}
+                  />
                 </Form.Item>
-                <Form.Item label="Port">
-                  <InputNumber value={wizard.database.port} onChange={(v) => update({ database: { ...wizard.database, port: v || 5432 } })} style={{ width: '100%' }} />
+                <Form.Item label="Port" required>
+                  <InputNumber
+                    value={wizard.database.port}
+                    onChange={(v) => {
+                      setDbValidated(false);
+                      update({ database: { ...wizard.database, port: v || 5432 } });
+                    }}
+                    style={{ width: '100%' }}
+                  />
                 </Form.Item>
-                <Form.Item label="Username">
-                  <Input value={wizard.database.user} onChange={(e) => update({ database: { ...wizard.database, user: e.target.value } })} />
+                <Form.Item label="Username" required>
+                  <Input
+                    value={wizard.database.user}
+                    onChange={(e) => {
+                      setDbValidated(false);
+                      update({ database: { ...wizard.database, user: e.target.value } });
+                    }}
+                  />
                 </Form.Item>
-                <Form.Item label="Password">
-                  <Input.Password value={wizard.database.password} onChange={(e) => update({ database: { ...wizard.database, password: e.target.value } })} />
+                <Form.Item label="Password" required>
+                  <Input.Password
+                    value={wizard.database.password}
+                    onChange={(e) => {
+                      setDbValidated(false);
+                      update({ database: { ...wizard.database, password: e.target.value } });
+                    }}
+                  />
                 </Form.Item>
-                <Button onClick={testDb}>Test connection</Button>
+                <Space>
+                  <Button type="primary" onClick={testDb}>Test connection</Button>
+                  {dbValidated && <Text type="success">Connection verified</Text>}
+                </Space>
+                {!dbValidated && (
+                  <Paragraph type="secondary" style={{ marginTop: 12 }}>
+                    Test the connection before continuing.
+                  </Paragraph>
+                )}
               </Form>
             )}
           </Card>
@@ -582,16 +728,7 @@ export default function App() {
               </div>
             )}
             {deployError && <Alert message={deployError} type="error" style={{ marginBottom: 12 }} />}
-            <div style={{
-              background: '#1e1e1e',
-              color: '#d4d4d4',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              padding: 12,
-              height: 360,
-              overflow: 'auto',
-              borderRadius: 8,
-            }}>
+            <div className="installer-log-viewer">
               {logs.map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
@@ -621,17 +758,19 @@ export default function App() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ background: '#001529', padding: '0 24px' }}>
-        <Title level={3} style={{ color: '#fff', margin: '16px 0' }}>DT Orch Setup</Title>
+    <Layout className="installer-layout">
+      <Header className="installer-header">
+        <InstallerBrand variant="header" />
       </Header>
-      <Content style={{ padding: 24, maxWidth: 960, margin: '0 auto', width: '100%' }}>
-        <Steps
-          current={userStepIndex(step)}
-          items={USER_STEP_LABELS.map((t) => ({ title: t }))}
-          style={{ marginBottom: 24 }}
-          responsive={false}
-        />
+      <Content className="installer-content">
+        <div className="installer-steps">
+          <Steps
+            current={userStepIndex(step)}
+            items={USER_STEP_LABELS.map((t) => ({ title: t }))}
+            size="small"
+            labelPlacement="vertical"
+          />
+        </div>
         {renderStep()}
         {step > 0 && step < 8 && step !== 7 && (
           <Space style={{ marginTop: 16 }}>

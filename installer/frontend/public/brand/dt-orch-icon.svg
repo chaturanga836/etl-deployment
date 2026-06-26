@@ -1,0 +1,27 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DT Orch">
+  <defs>
+    <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-orange" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="55%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#ff8c00"/>
+    </linearGradient>
+  </defs>
+  <circle cx="24" cy="24" r="14" fill="none" stroke="url(#ring)" stroke-width="2.5" filter="url(#glow-cyan)"/>
+  <circle cx="24" cy="10" r="3.1" fill="#00d4ff" filter="url(#glow-cyan)"/>
+  <circle cx="36.1" cy="31" r="2.6" fill="#ff8c00" filter="url(#glow-orange)"/>
+  <circle cx="11.9" cy="31" r="2.6" fill="#00d4ff" filter="url(#glow-cyan)"/>
+</svg>

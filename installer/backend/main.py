@@ -31,12 +31,22 @@ def health():
 
 
 if STATIC_DIR.is_dir():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+    assets_dir = STATIC_DIR / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         if full_path.startswith("api"):
             return {"detail": "Not found"}
+        if full_path:
+            file_path = (STATIC_DIR / full_path).resolve()
+            try:
+                file_path.relative_to(STATIC_DIR.resolve())
+            except ValueError:
+                return {"detail": "Not found"}
+            if file_path.is_file():
+                return FileResponse(file_path)
         index = STATIC_DIR / "index.html"
         if index.is_file():
             return FileResponse(index)
