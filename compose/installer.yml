@@ -19,6 +19,7 @@ services:
       LICENSE_PUBLIC_KEY_PATH: /opt/etl-deployment/config/license-public.pem
       LICENSE_PRIVATE_KEY_PATH: /opt/etl-deployment/config/license-private.pem
       INSTALLER_PORT: ${INSTALLER_PORT:-3000}
+      INSTALLER_PUBLIC_HOST: ${INSTALLER_PUBLIC_HOST:-}
     restart: unless-stopped
 
 volumes:

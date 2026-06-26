@@ -43,5 +43,5 @@ echo ""
 echo "================================================================"
 echo ""
 
-export INSTALLER_PORT INSTALLER_BIND
+export INSTALLER_PORT INSTALLER_BIND INSTALLER_PUBLIC_HOST="$ACCESS_HOST"
 docker compose -f compose/installer.yml up --build "$@"
