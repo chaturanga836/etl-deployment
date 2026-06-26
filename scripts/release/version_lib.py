@@ -19,6 +19,31 @@ DEFAULT_REGISTRY = "ghcr.io/chaturanga836"
 DEFAULT_PLATFORM = "1.0.0"
 
 
+def normalize_registry(registry: str) -> str:
+    return registry.strip().rstrip("/")
+
+
+def image_ref(registry: str, image_name: str, tag: str) -> str:
+    registry = normalize_registry(registry)
+    normalized_tag = tag if tag.startswith("v") else f"v{tag}"
+    return f"{registry}/{image_name}:{normalized_tag}"
+
+
+def image_ref_template(image_name: str) -> str:
+    return f"${{REGISTRY_URL}}/{image_name}:${{IMAGE_TAG}}"
+
+
+def repair_image_ref(ref: str, registry: str, image_name: str, tag: str) -> str:
+    """Rebuild canonical GHCR ref and collapse duplicated org path segments."""
+    registry = normalize_registry(registry)
+    org = registry.rsplit("/", 1)[-1]
+    if org:
+        duplicate = f"{registry}/{org}/{image_name}:"
+        if duplicate in ref:
+            ref = ref.replace(f"{registry}/{org}/", f"{registry}/", 1)
+    return image_ref(registry, image_name, tag)
+
+
 def parse_version_file(path: Path) -> tuple[str, str]:
     """Return (platform semver without leading v, registry_url)."""
     platform = DEFAULT_PLATFORM
@@ -101,15 +126,13 @@ def sync_env_from_version(env_path: Path, version_path: Path) -> bool:
         elif key == "IMAGE_TAG":
             new_val = tag
         elif key in IMAGE_KEYS:
-            if "YOUR_GITHUB_ORG" in val:
-                new_val = f"${{REGISTRY_URL}}/{IMAGE_KEYS[key]}:${{IMAGE_TAG}}"
-            elif "${" in val:
-                new_val = val
+            image_name = IMAGE_KEYS[key]
+            if "YOUR_GITHUB_ORG" in val or "${" in val:
+                new_val = image_ref_template(image_name)
             elif "/" in val and ":" in val:
-                new_val = re.sub(r"^[^/]+/", f"{registry}/", val)
-                new_val = re.sub(r":v[^:/?#]+$", f":{tag}", new_val)
+                new_val = repair_image_ref(val, registry, image_name, tag)
             else:
-                new_val = f"${{REGISTRY_URL}}/{IMAGE_KEYS[key]}:${{IMAGE_TAG}}"
+                new_val = image_ref_template(image_name)
         else:
             out.append(line)
             continue
