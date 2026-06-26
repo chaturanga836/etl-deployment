@@ -15,6 +15,12 @@ _IMAGE_NAMES = {
     "infra": "baas-infra",
     "scraper": "dt-orch-scraper",
 }
+_COMPONENT_LABELS = {
+    "api": "API and background processing",
+    "frontend": "Web application",
+    "infra": "Platform services",
+    "scraper": "Data collection service",
+}
 
 
 def _deployment_root() -> Path:
@@ -61,9 +67,9 @@ def load_install_defaults() -> dict[str, Any]:
         platform, registry_url = _parse_version_file(version_file)
 
     image_tag = _platform_to_tag(platform)
-    images = [
-        {"role": role, "name": name, "reference": f"{registry_url}/{name}:{image_tag}"}
-        for role, name in _IMAGE_NAMES.items()
+    components = [
+        {"id": role, "label": _COMPONENT_LABELS.get(role, role)}
+        for role in _IMAGE_NAMES
     ]
 
     return {
@@ -71,10 +77,7 @@ def load_install_defaults() -> dict[str, Any]:
         "platform_version": platform,
         "registry_url": registry_url,
         "image_tag": image_tag,
-        "images": images,
+        "components": components,
         "end_user_managed": True,
-        "description": (
-            "Official DT Orch release packages for this installer. "
-            "No registry configuration is required for a standard install."
-        ),
+        "description": "DT Orch will be downloaded and installed automatically.",
     }

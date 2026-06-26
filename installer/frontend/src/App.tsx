@@ -3,7 +3,6 @@ import {
   Alert,
   Button,
   Card,
-  Checkbox,
   Collapse,
   Descriptions,
   Form,
@@ -37,18 +36,29 @@ import { useDeployEvents } from './useDeployEvents';
 const { Header, Content } = Layout;
 const { Title, Paragraph, Text, Link } = Typography;
 
-const STEP_LABELS = [
+/** User-visible steps (internal step 2 = packages, skipped in navigation). */
+const USER_STEP_LABELS = [
   'Welcome',
-  'Target',
-  'Packages',
-  'Super Admin',
+  'Install type',
+  'Your account',
   'Database',
-  'License',
-  'Config',
-  'Review',
-  'Deploy',
-  'Complete',
+  'Trial',
+  'Web address',
+  'Confirm',
+  'Installing',
+  'Done',
 ];
+
+function userStepIndex(internal: number): number {
+  return internal <= 1 ? internal : internal - 1;
+}
+
+function skipPackagesStep(internal: number, delta: number): number {
+  let n = internal + delta;
+  if (delta > 0 && n === 2) n = 3;
+  if (delta < 0 && n === 2) n = 1;
+  return Math.max(0, Math.min(n, 9));
+}
 
 export default function App() {
   const [step, setStep] = useState(0);
@@ -56,7 +66,6 @@ export default function App() {
   const [prereqs, setPrereqs] = useState<Prerequisites | null>(null);
   const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
   const [installDefaults, setInstallDefaults] = useState<InstallDefaults | null>(null);
-  const [showAdvancedRegistry, setShowAdvancedRegistry] = useState(false);
   const [trialInfo, setTrialInfo] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [loginUrl, setLoginUrl] = useState('');
@@ -75,7 +84,7 @@ export default function App() {
   const { logs, phase, bottomRef } = useDeployEvents(jobId, onComplete, onError);
 
   useEffect(() => {
-    fetchPrerequisites().then(setPrereqs).catch(() => message.error('Could not load prerequisites'));
+    fetchPrerequisites().then(setPrereqs).catch(() => {});
     fetchInstallDefaults().then((defaults) => {
       setInstallDefaults(defaults);
       setWizard((w) => ({
@@ -124,10 +133,10 @@ export default function App() {
       }
     }
     if (step === 8) return;
-    setStep((s) => Math.min(s + 1, 9));
+    setStep((s) => skipPackagesStep(s, 1));
   };
 
-  const back = () => setStep((s) => Math.max(s - 1, 0));
+  const back = () => setStep((s) => skipPackagesStep(s, -1));
 
   const runDeploy = async () => {
     setDeployError('');
@@ -136,7 +145,7 @@ export default function App() {
       setJobId(id);
       setStep(8);
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Deploy failed');
+      message.error(e instanceof Error ? e.message : 'Install failed');
     }
   };
 
@@ -149,122 +158,89 @@ export default function App() {
     }
   };
 
+  const siteUrl = hostInfo?.platform_url
+    ?? (wizard.monolith.public_host ? `http://${wizard.monolith.public_host}` : '');
+
   const renderStep = () => {
     switch (step) {
       case 0:
         return (
-          <Card title="Welcome to DT Orch Setup">
+          <Card title="Welcome">
             <Paragraph>
-              Configure and install DT Orch entirely in this wizard. You do not need to edit
-              <Text code>.env</Text> files manually — settings are saved and applied when you click Install.
+              This guide will install <Text strong>DT Orch</Text>
+              {installDefaults ? ` version ${installDefaults.platform_version}` : ''} on this server.
+              Answer a few questions, then click <Text strong>Install</Text>.
             </Paragraph>
-            {hostInfo && (
+            {siteUrl && (
               <Alert
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}
-                message="Open this setup page"
+                message="After installation"
                 description={
-                  <Space direction="vertical">
-                    <Text>
-                      Installer URL: <Link href={hostInfo.installer_url} target="_blank" rel="noreferrer">{hostInfo.installer_url}</Link>
-                    </Text>
-                    <Text type="secondary">
-                      After install, the platform will be at {hostInfo.platform_url}
-                    </Text>
-                    <Text type="secondary">
-                      EC2 security group: allow inbound TCP {hostInfo.security_group_ports.join(' and ')}
-                    </Text>
-                  </Space>
+                  <Text>
+                    You will open your platform at{' '}
+                    <Link href={`${siteUrl.replace(/\/$/, '')}/login`} target="_blank" rel="noreferrer">
+                      {siteUrl.replace(/\/$/, '')}/login
+                    </Link>
+                  </Text>
                 }
               />
             )}
-            <Paragraph>
-              Steps: deployment target → official packages → super admin → database →
-              license (optional trial) → host settings → review → install.
-            </Paragraph>
-            {prereqs && (
-              <Space direction="vertical">
-                <Text>Docker: {prereqs.docker.available ? prereqs.docker.version : 'Not found'}</Text>
-                <Text>Compose: {prereqs.compose.available ? prereqs.compose.version : 'Not found'}</Text>
-                <Text>Helm: {prereqs.helm.available ? prereqs.helm.version : 'Not found'}</Text>
-                <Text>kubectl: {prereqs.kubectl.available ? prereqs.kubectl.version : 'Not found'}</Text>
-              </Space>
-            )}
             {!prereqs?.docker.available && (
-              <Alert type="warning" message="Docker is required for monolith and distributed installs." style={{ marginTop: 16 }} />
+              <Alert type="warning" message="Docker must be installed on this server before you continue." style={{ marginTop: 16 }} />
+            )}
+            {prereqs && (
+              <Collapse
+                ghost
+                style={{ marginTop: 8 }}
+                items={[{
+                  key: 'sys',
+                  label: 'Technical system check',
+                  children: (
+                    <Space direction="vertical">
+                      <Text>Docker: {prereqs.docker.available ? prereqs.docker.version : 'Not found'}</Text>
+                      <Text>Compose: {prereqs.compose.available ? prereqs.compose.version : 'Not found'}</Text>
+                    </Space>
+                  ),
+                }]}
+              />
             )}
           </Card>
         );
       case 1:
         return (
-          <Card title="Deployment target">
+          <Card title="How do you want to install?">
             <Radio.Group
               value={wizard.deployment_mode}
               onChange={(e) => update({ deployment_mode: e.target.value })}
             >
-              <Space direction="vertical">
-                <Radio value="monolith">Monolith — single VM with Docker Compose</Radio>
-                <Radio value="distributed">Distributed — multi-VM roles</Radio>
-                <Radio value="kubernetes">Kubernetes — Helm chart</Radio>
+              <Space direction="vertical" size="middle">
+                <Radio value="monolith">
+                  <Text strong>Single server</Text>
+                  <br />
+                  <Text type="secondary">Recommended — everything on this machine.</Text>
+                </Radio>
+                <Radio value="distributed" disabled>
+                  <Text strong>Multiple servers</Text>
+                  <br />
+                  <Text type="secondary">For advanced setups (coming soon in this wizard).</Text>
+                </Radio>
+                <Radio value="kubernetes" disabled>
+                  <Text strong>Kubernetes</Text>
+                  <br />
+                  <Text type="secondary">For advanced setups (coming soon in this wizard).</Text>
+                </Radio>
               </Space>
             </Radio.Group>
           </Card>
         );
-      case 2:
-        return (
-          <Card title="Official DT Orch packages">
-            <Alert
-              type="success"
-              showIcon
-              message="Pre-configured for this install"
-              description={installDefaults?.description ?? 'Official release packages are selected automatically. Click Next to continue.'}
-              style={{ marginBottom: 16 }}
-            />
-            <Descriptions bordered size="small" column={1} style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="Product">{wizard.app_name}</Descriptions.Item>
-              <Descriptions.Item label="Version">{installDefaults?.platform_version ?? wizard.image_tag.replace(/^v/, '')}</Descriptions.Item>
-              <Descriptions.Item label="Release">{wizard.image_tag}</Descriptions.Item>
-            </Descriptions>
-            {installDefaults?.images && (
-              <Descriptions bordered size="small" column={1} title="Components" style={{ marginBottom: 16 }}>
-                {installDefaults.images.map((img) => (
-                  <Descriptions.Item key={img.role} label={img.role}>
-                    <Text code style={{ fontSize: 11 }}>{img.reference}</Text>
-                  </Descriptions.Item>
-                ))}
-              </Descriptions>
-            )}
-            <Paragraph type="secondary">
-              You do not need to enter registry details. Only change these if your vendor gave you a private mirror.
-            </Paragraph>
-            <Collapse
-              ghost
-              activeKey={showAdvancedRegistry ? ['advanced'] : []}
-              onChange={(keys) => setShowAdvancedRegistry(keys.includes('advanced'))}
-              items={[{
-                key: 'advanced',
-                label: 'Advanced: custom registry (optional)',
-                children: (
-                  <Form layout="vertical">
-                    <Form.Item label="Registry URL">
-                      <Input value={wizard.registry_url} onChange={(e) => update({ registry_url: e.target.value })} />
-                    </Form.Item>
-                    <Form.Item label="Image tag">
-                      <Input value={wizard.image_tag} onChange={(e) => update({ image_tag: e.target.value })} />
-                    </Form.Item>
-                    <Form.Item label="Application name">
-                      <Input value={wizard.app_name} onChange={(e) => update({ app_name: e.target.value })} />
-                    </Form.Item>
-                  </Form>
-                ),
-              }]}
-            />
-          </Card>
-        );
       case 3:
         return (
-          <Card title="Super Admin account">
+          <Card title="Your administrator account">
+            <Paragraph type="secondary">
+              You will use this to sign in after installation.
+            </Paragraph>
             <Form layout="vertical">
               <Form.Item label="Username" required>
                 <Input value={wizard.superadmin_username} onChange={(e) => update({ superadmin_username: e.target.value })} />
@@ -286,82 +262,99 @@ export default function App() {
               onChange={(e) => update({ database: { ...wizard.database, source: e.target.value } })}
               style={{ marginBottom: 16 }}
             >
-              <Radio value="bundled">Self-deploy (bundled Postgres)</Radio>
-              <Radio value="external">Connect to existing database</Radio>
+              <Space direction="vertical">
+                <Radio value="bundled">
+                  <Text strong>Install database for me</Text>
+                  <br />
+                  <Text type="secondary">Recommended for a new server.</Text>
+                </Radio>
+                <Radio value="external">
+                  <Text strong>Use my existing database</Text>
+                </Radio>
+              </Space>
             </Radio.Group>
-            <Form layout="vertical">
-              <Form.Item label="DB user">
-                <Input value={wizard.database.user} onChange={(e) => update({ database: { ...wizard.database, user: e.target.value } })} />
-              </Form.Item>
-              <Form.Item label="DB password">
-                <Input.Password value={wizard.database.password} onChange={(e) => update({ database: { ...wizard.database, password: e.target.value } })} />
-              </Form.Item>
-              {wizard.database.source === 'external' && (
-                <>
-                  <Form.Item label="Host">
-                    <Input value={wizard.database.host} onChange={(e) => update({ database: { ...wizard.database, host: e.target.value } })} />
-                  </Form.Item>
-                  <Form.Item label="Port">
-                    <InputNumber value={wizard.database.port} onChange={(v) => update({ database: { ...wizard.database, port: v || 5432 } })} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Button onClick={testDb}>Test connection</Button>
-                </>
-              )}
-            </Form>
+            {wizard.database.source === 'external' && (
+              <Form layout="vertical">
+                <Form.Item label="Host">
+                  <Input value={wizard.database.host} onChange={(e) => update({ database: { ...wizard.database, host: e.target.value } })} />
+                </Form.Item>
+                <Form.Item label="Port">
+                  <InputNumber value={wizard.database.port} onChange={(v) => update({ database: { ...wizard.database, port: v || 5432 } })} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label="Username">
+                  <Input value={wizard.database.user} onChange={(e) => update({ database: { ...wizard.database, user: e.target.value } })} />
+                </Form.Item>
+                <Form.Item label="Password">
+                  <Input.Password value={wizard.database.password} onChange={(e) => update({ database: { ...wizard.database, password: e.target.value } })} />
+                </Form.Item>
+                <Button onClick={testDb}>Test connection</Button>
+              </Form>
+            )}
           </Card>
         );
       case 5:
         return (
-          <Card title="License">
+          <Card title="Trial">
             <Paragraph>
-              Start a <Text strong>3-month free trial</Text> or paste a license key from your vendor.
-              If you skip this step, a trial license is applied automatically at install time.
+              Start with a <Text strong>3-month free trial</Text>. No license key is required.
             </Paragraph>
-            <Form layout="vertical">
-              <Space style={{ marginBottom: 16 }}>
-                <Button type="primary" onClick={async () => {
-                  try {
-                    const trial = await requestTrialLicense();
-                    update({ license_key: trial.license_key });
-                    setTrialInfo(`Trial active until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
-                    message.success(`3-month trial started (${trial.customer_id})`);
-                  } catch (e) {
-                    message.error(e instanceof Error ? e.message : 'Trial failed');
-                  }
-                }}>
-                  Start 3-month trial
-                </Button>
-                {trialInfo && <Text type="success">{trialInfo}</Text>}
-              </Space>
-              <Form.Item label="License key (optional if using trial)">
-                <Input.TextArea rows={4} value={wizard.license_key} onChange={(e) => update({ license_key: e.target.value })} placeholder="Leave empty to auto-apply trial at install" />
-              </Form.Item>
-              {wizard.license_key && (
-                <Button onClick={async () => {
-                  try {
-                    const info = await validateLicense(wizard.license_key);
-                    message.success(`Valid — customer ${info.customer_id}, edition ${info.edition}`);
-                  } catch (e) {
-                    message.error(e instanceof Error ? e.message : 'Invalid');
-                  }
-                }}>Validate license</Button>
-              )}
-            </Form>
+            <Button type="primary" size="large" onClick={async () => {
+              try {
+                const trial = await requestTrialLicense();
+                update({ license_key: trial.license_key });
+                setTrialInfo(`Trial active until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
+                message.success('Free trial ready');
+              } catch (e) {
+                message.error(e instanceof Error ? e.message : 'Could not start trial');
+              }
+            }}>
+              Activate free trial
+            </Button>
+            {trialInfo && <Paragraph style={{ marginTop: 12 }}><Text type="success">{trialInfo}</Text></Paragraph>}
+            <Collapse
+              ghost
+              style={{ marginTop: 16 }}
+              items={[{
+                key: 'license',
+                label: 'I already have a license key',
+                children: (
+                  <Form layout="vertical">
+                    <Form.Item label="License key">
+                      <Input.TextArea rows={3} value={wizard.license_key} onChange={(e) => update({ license_key: e.target.value })} />
+                    </Form.Item>
+                    {wizard.license_key && (
+                      <Button onClick={async () => {
+                        try {
+                          await validateLicense(wizard.license_key);
+                          message.success('License accepted');
+                        } catch (e) {
+                          message.error(e instanceof Error ? e.message : 'Invalid license');
+                        }
+                      }}>Check license</Button>
+                    )}
+                  </Form>
+                ),
+              }]}
+            />
+            <Paragraph type="secondary" style={{ marginTop: 12 }}>
+              If you skip this page, a trial is applied automatically when you install.
+            </Paragraph>
           </Card>
         );
       case 6:
         if (wizard.deployment_mode === 'monolith') {
           return (
-            <Card title="Monolith settings">
+            <Card title="Your website address">
+              <Paragraph type="secondary">
+                Enter the address people will use to open DT Orch in a browser (usually this server&apos;s public IP or domain name).
+              </Paragraph>
               <Form layout="vertical">
-                <Form.Item label="Public host" extra="Detected from this server; used for login URLs after install">
-                  <Input value={wizard.monolith.public_host} onChange={(e) => update({ monolith: { ...wizard.monolith, public_host: e.target.value } })} />
-                </Form.Item>
-                <Form.Item label="HTTP port">
-                  <InputNumber value={wizard.monolith.http_port} onChange={(v) => update({ monolith: { ...wizard.monolith, http_port: v || 80 } })} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item>
-                  <Checkbox checked={wizard.monolith.use_proxy} onChange={(e) => update({ monolith: { ...wizard.monolith, use_proxy: e.target.checked } })}>Use nginx reverse proxy</Checkbox>
+                <Form.Item label="Address" extra="Example: 13.200.160.10 or studio.mycompany.com">
+                  <Input
+                    value={wizard.monolith.public_host}
+                    onChange={(e) => update({ monolith: { ...wizard.monolith, public_host: e.target.value } })}
+                    placeholder="13.200.160.10"
+                  />
                 </Form.Item>
               </Form>
             </Card>
@@ -377,20 +370,16 @@ export default function App() {
                 <Form.Item label="Ingress host" required>
                   <Input value={wizard.kubernetes.ingress_host} onChange={(e) => update({ kubernetes: { ...wizard.kubernetes, ingress_host: e.target.value } })} />
                 </Form.Item>
-                <Form.Item label="Kubeconfig path (optional)">
-                  <Input value={wizard.kubernetes.kubeconfig_path} onChange={(e) => update({ kubernetes: { ...wizard.kubernetes, kubeconfig_path: e.target.value } })} placeholder="/root/.kube/config" />
-                </Form.Item>
               </Form>
             </Card>
           );
         }
         return (
-          <Card title="Distributed hosts">
+          <Card title="Server addresses">
             <Form layout="vertical">
               {Object.entries(wizard.distributed.services).map(([name, svc]) => (
                 <Form.Item key={name} label={name}>
                   <Input
-                    addonBefore="host"
                     value={svc.host}
                     onChange={(e) => update({
                       distributed: {
@@ -403,38 +392,39 @@ export default function App() {
                   />
                 </Form.Item>
               ))}
-              <Title level={5}>SSH (remote hosts)</Title>
-              <Form.Item label="SSH user">
-                <Input value={wizard.ssh.user} onChange={(e) => update({ ssh: { ...wizard.ssh, user: e.target.value } })} />
-              </Form.Item>
-              <Form.Item label="SSH private key path">
-                <Input value={wizard.ssh.key_path} onChange={(e) => update({ ssh: { ...wizard.ssh, key_path: e.target.value } })} />
-              </Form.Item>
             </Form>
           </Card>
         );
       case 7:
         return (
-          <Card title="Review">
-            <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, overflow: 'auto' }}>
-              {JSON.stringify({
-                mode: wizard.deployment_mode,
-                product: wizard.app_name,
-                version: wizard.image_tag,
-                superadmin: wizard.superadmin_username,
-                database: wizard.database.source,
-                license: wizard.license_key ? '(set)' : '(3-month trial at install)',
-              }, null, 2)}
-            </pre>
-            <Button type="primary" size="large" onClick={runDeploy} style={{ marginTop: 16 }}>
-              Start deployment
+          <Card title="Ready to install">
+            <Descriptions bordered column={1} size="middle">
+              <Descriptions.Item label="Product">{wizard.app_name}</Descriptions.Item>
+              <Descriptions.Item label="Version">{installDefaults?.platform_version ?? wizard.image_tag.replace(/^v/, '')}</Descriptions.Item>
+              <Descriptions.Item label="Install type">Single server</Descriptions.Item>
+              <Descriptions.Item label="Administrator">{wizard.superadmin_username || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Database">
+                {wizard.database.source === 'bundled' ? 'Included with install' : 'Your existing database'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Trial">
+                {wizard.license_key ? 'License / trial ready' : '3-month trial (at install)'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Website">
+                {wizard.monolith.public_host
+                  ? `http://${wizard.monolith.public_host}`
+                  : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Button type="primary" size="large" onClick={runDeploy} style={{ marginTop: 24 }}>
+              Install DT Orch
             </Button>
           </Card>
         );
       case 8:
         return (
-          <Card title="Deploying…">
-            {phase && <Alert message={`Phase: ${phase}`} type="info" style={{ marginBottom: 12 }} />}
+          <Card title="Installing…">
+            <Paragraph>Please wait while DT Orch is installed. This may take several minutes.</Paragraph>
+            {phase && <Alert message={`Step: ${phase}`} type="info" style={{ marginBottom: 12 }} />}
             {deployError && <Alert message={deployError} type="error" style={{ marginBottom: 12 }} />}
             <div style={{
               background: '#1e1e1e',
@@ -457,15 +447,15 @@ export default function App() {
         return (
           <Result
             status="success"
-            title="Installation complete"
-            subTitle={alreadyInstalled ? 'DT Orch is already installed on this host.' : 'Your platform is ready.'}
+            title="DT Orch is ready"
+            subTitle={alreadyInstalled ? 'DT Orch is already installed on this server.' : 'You can sign in now.'}
             extra={[
               <Paragraph key="u">
-                Login URL:{' '}
+                Open:{' '}
                 <Link href={loginUrl} target="_blank" rel="noreferrer">{loginUrl || '/login'}</Link>
               </Paragraph>,
-              <Paragraph key="a">Super admin: <Text code>{wizard.superadmin_username || '(see install state)'}</Text></Paragraph>,
-              <Button type="primary" key="go" href={loginUrl || '/login'}>Open login page</Button>,
+              <Paragraph key="a">Administrator: <Text strong>{wizard.superadmin_username || '—'}</Text></Paragraph>,
+              <Button type="primary" key="go" href={loginUrl || '/login'}>Open DT Orch</Button>,
             ]}
           />
         );
@@ -480,7 +470,12 @@ export default function App() {
         <Title level={3} style={{ color: '#fff', margin: '16px 0' }}>DT Orch Setup</Title>
       </Header>
       <Content style={{ padding: 24, maxWidth: 960, margin: '0 auto', width: '100%' }}>
-        <Steps current={step} items={STEP_LABELS.map((t) => ({ title: t }))} style={{ marginBottom: 24 }} responsive={false} />
+        <Steps
+          current={userStepIndex(step)}
+          items={USER_STEP_LABELS.map((t) => ({ title: t }))}
+          style={{ marginBottom: 24 }}
+          responsive={false}
+        />
         {renderStep()}
         {step > 0 && step < 8 && step !== 7 && (
           <Space style={{ marginTop: 16 }}>
@@ -489,7 +484,7 @@ export default function App() {
           </Space>
         )}
         {step === 0 && (
-          <Button type="primary" onClick={next} style={{ marginTop: 16 }}>Get started</Button>
+          <Button type="primary" onClick={next} style={{ marginTop: 16 }} size="large">Get started</Button>
         )}
       </Content>
     </Layout>

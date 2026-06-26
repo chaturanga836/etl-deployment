@@ -12,7 +12,7 @@ export type InstallDefaults = {
   platform_version: string;
   registry_url: string;
   image_tag: string;
-  images: { role: string; name: string; reference: string }[];
+  components: { id: string; label: string }[];
   end_user_managed: boolean;
   description: string;
 };
