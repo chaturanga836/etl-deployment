@@ -172,6 +172,16 @@ EOF
   exit 1
 }
 
+preflight_license_key() {
+  local key_file="${ROOT_DIR}/config/license-public.pem"
+  if [[ ! -f "$key_file" ]]; then
+    echo "ERROR: Missing ${key_file}"
+    echo "Run: python3 scripts/generate-license-keys.py --out-dir config"
+    echo "Or start the setup wizard once: ./scripts/setup-ui.sh"
+    exit 1
+  fi
+}
+
 docker_compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -298,6 +308,7 @@ set +a
 maybe_enable_dev_build
 registry_login_if_configured
 preflight_registry_access
+preflight_license_key
 
 if [[ -n "$ROLE" ]]; then
   echo "Ensuring Docker networks exist..."

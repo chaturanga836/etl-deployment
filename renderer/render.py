@@ -227,6 +227,7 @@ def render_env(config: dict[str, Any]) -> str:
 
     lines.extend([
         _env_line("LICENSE_KEY", license_key),
+        "LICENSE_PUBLIC_KEY_PATH=/etc/dt-orch/license-public.pem",
         "DTORCH_SETUP_COMPLETE=false",
         f"INSTALL_BOOTSTRAP_TOKEN={bootstrap_token}",
         _env_line("SUPERADMIN_USERNAME", superadmin.get("username", "")),
