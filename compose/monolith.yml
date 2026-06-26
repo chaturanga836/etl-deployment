@@ -42,7 +42,7 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
       # Use bootstrap DB `postgres` — app DBs are created by init-db.sql on first start.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elt} -d postgres"]
@@ -71,7 +71,7 @@ services:
       <<: *api-env
     volumes:
       - backend_logs:/app/logs
-      - ../config/license-public.pem:/etc/dt-orch/license-public.pem:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/config/license-public.pem:/etc/dt-orch/license-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -240,9 +240,9 @@ services:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ../nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ../nginx/ssl.conf.template:/etc/nginx/templates/ssl.conf.template:ro
-      - ../scripts/proxy-entrypoint.sh:/docker-entrypoint.d/40-enable-ssl.sh:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/nginx/ssl.conf.template:/etc/nginx/templates/ssl.conf.template:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/scripts/proxy-entrypoint.sh:/docker-entrypoint.d/40-enable-ssl.sh:ro
       - /var/www/letsencrypt:/var/www/letsencrypt:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:

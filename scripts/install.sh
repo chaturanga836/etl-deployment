@@ -89,6 +89,50 @@ resolve_env_file() {
   echo "$path"
 }
 
+resolve_deployment_host_root() {
+  local root="$ROOT_DIR"
+  # Wizard container sees the repo at /opt/etl-deployment; host Docker needs the real checkout path.
+  if [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]; then
+    local host_root=""
+    local container_name="${INSTALLER_CONTAINER_NAME:-dt-orch-installer}"
+    host_root="$(docker inspect "$container_name" --format '{{ range .Mounts }}{{ if eq .Destination "/opt/etl-deployment" }}{{ .Source }}{{ end }}{{ end }}' 2>/dev/null || true)"
+    if [[ -z "$host_root" ]]; then
+      host_root="$(docker inspect "$HOSTNAME" --format '{{ range .Mounts }}{{ if eq .Destination "/opt/etl-deployment" }}{{ .Source }}{{ end }}{{ end }}' 2>/dev/null || true)"
+    fi
+    if [[ -n "$host_root" && -d "$host_root" ]]; then
+      root="$host_root"
+    fi
+  fi
+  echo "$root"
+}
+
+export_deployment_host_root() {
+  export ETL_DEPLOYMENT_HOST_ROOT="$(resolve_deployment_host_root)"
+  echo "Deployment host root for bind mounts: ${ETL_DEPLOYMENT_HOST_ROOT}"
+}
+
+preflight_bind_mounts() {
+  local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
+  local rel
+  for rel in \
+    nginx/default.conf \
+    nginx/ssl.conf.template \
+    scripts/proxy-entrypoint.sh \
+    scripts/init-db.sql \
+    config/license-public.pem; do
+    local path="${root}/${rel}"
+    if [[ -f "$path" ]]; then
+      continue
+    fi
+    echo "ERROR: Required file missing for Docker bind mount: ${path}"
+    if [[ -d "$path" ]]; then
+      echo "That path is a DIRECTORY (Docker created it when the real file was missing)."
+      echo "Remove it, then retry: rm -rf \"${path}\""
+    fi
+    exit 1
+  done
+}
+
 local_dev_sources_available() {
   [[ -f "$ROOT_DIR/../etl-back/Dockerfile" || -f "/opt/etl-back/Dockerfile" ]]
 }
@@ -173,7 +217,8 @@ EOF
 }
 
 preflight_license_key() {
-  local key_file="${ROOT_DIR}/config/license-public.pem"
+  local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
+  local key_file="${root}/config/license-public.pem"
   if [[ ! -f "$key_file" ]]; then
     echo "ERROR: Missing ${key_file}"
     echo "Run: python3 scripts/generate-license-keys.py --out-dir config"
@@ -327,6 +372,8 @@ set +a
 maybe_enable_dev_build
 registry_login_if_configured
 preflight_registry_access
+export_deployment_host_root
+preflight_bind_mounts
 preflight_license_key
 prepare_runtime_env "$EF"
 
