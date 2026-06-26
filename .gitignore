@@ -1,1 +1,6 @@
 config/license-private.pem
+
+# Installer frontend (install deps in Docker / locally with npm ci)
+installer/frontend/node_modules/
+installer/frontend/dist/
+installer/frontend/tsconfig.tsbuildinfo
