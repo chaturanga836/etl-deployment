@@ -53,6 +53,42 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+repair_env_file_for_shell() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 0
+  python3 - "$env_file" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().splitlines()
+changed = False
+out = []
+for line in lines:
+    if line.lstrip().startswith("#") or not line.strip():
+        out.append(line)
+        continue
+    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
+    if not match:
+        out.append(line)
+        continue
+    key, val = match.group(1), match.group(2)
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        out.append(line)
+        continue
+    if re.search(r"\s", val):
+        esc = val.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+        out.append(f'{key}="{esc}"')
+        changed = True
+    else:
+        out.append(line)
+if changed:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out) + "\n")
+    print(f"Repaired unquoted .env values in {path}")
+PY
+}
+
 ensure_env() {
   local env_file=".env"
   if [[ -n "$STATE_DIR" && -f "${STATE_DIR}/.env" ]]; then
@@ -67,6 +103,11 @@ ensure_env() {
       exit 1
     fi
   fi
+  local resolved="$env_file"
+  if [[ "$resolved" != /* ]]; then
+    resolved="$ROOT_DIR/$resolved"
+  fi
+  repair_env_file_for_shell "$resolved"
   ENV_FILE="${ENV_FILE:-$env_file}"
 }
 
