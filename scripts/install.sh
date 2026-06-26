@@ -89,6 +89,10 @@ resolve_env_file() {
   echo "$path"
 }
 
+local_dev_sources_available() {
+  [[ -f "$ROOT_DIR/../etl-back/Dockerfile" || -f "/opt/etl-back/Dockerfile" ]]
+}
+
 maybe_enable_dev_build() {
   if [[ "$DEV_BUILD" == true ]]; then
     return 0
@@ -100,9 +104,9 @@ maybe_enable_dev_build() {
       return 0
       ;;
   esac
-  if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
+  if local_dev_sources_available; then
     DEV_BUILD=true
-    echo "Local source detected at ../etl-back — building images instead of pulling from registry."
+    echo "Local source detected — building images instead of pulling from registry."
   fi
 }
 
@@ -135,6 +139,12 @@ preflight_registry_access() {
 
   echo "Checking registry access for ${image}..."
   if docker manifest inspect "$image" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if local_dev_sources_available; then
+    DEV_BUILD=true
+    echo "Registry unavailable — building from local source instead (--dev)."
     return 0
   fi
 

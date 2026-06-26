@@ -21,6 +21,12 @@ STATE_DIR = Path(os.getenv("INSTALLER_STATE_DIR", "/opt/etl-deployment-state"))
 SCRIPTS_DIR = DEPLOYMENT_ROOT / "scripts"
 
 
+def _installer_dev_build() -> bool:
+    if os.getenv("INSTALLER_DEV_BUILD", "").lower() in ("1", "true", "yes"):
+        return True
+    return (Path("/opt/etl-back") / "Dockerfile").is_file()
+
+
 def _login_url_from_env(env_path: Path) -> str:
     env: dict[str, str] = {}
     if env_path.is_file():
@@ -169,7 +175,7 @@ async def deploy_monolith(job: DeployJob, config: dict[str, Any]) -> str:
 
     install_sh = SCRIPTS_DIR / "install.sh"
     install_args = ["bash", str(install_sh), "--state-dir", str(STATE_DIR)]
-    if os.getenv("INSTALLER_DEV_BUILD", "").lower() in ("1", "true", "yes"):
+    if _installer_dev_build():
         install_args.append("--dev")
     install_args.append("full")
     code = await _stream_process(

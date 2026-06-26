@@ -1,11 +1,11 @@
 # Optional overlay when sibling app repos exist (local development).
-# Enabled automatically by scripts/setup-ui.sh when ../etl-back is present.
+# Enabled automatically by scripts/setup-ui.sh when ../../etl-back is present.
 
 services:
   installer:
     volumes:
-      - ../etl-back:/opt/etl-back
-      - ../elt-frontend:/opt/elt-frontend
-      - ../platform-infra-repo:/opt/platform-infra-repo
+      - ../../etl-back:/opt/etl-back
+      - ../../elt-frontend:/opt/elt-frontend
+      - ../../platform-infra-repo:/opt/platform-infra-repo
     environment:
       INSTALLER_DEV_BUILD: "true"
