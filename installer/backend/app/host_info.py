@@ -56,6 +56,37 @@ def _usable_hostname(name: str | None) -> bool:
     return True
 
 
+def _is_public_facing_hostname(name: str | None) -> bool:
+    if not _usable_hostname(name):
+        return False
+    lower = name.lower()
+    if lower.endswith(".compute.internal"):
+        return False
+    if lower.startswith("ip-172-") or lower.startswith("ip-10-") or lower.startswith("ip-192-168-"):
+        return False
+    return True
+
+
+def _resolve_access_host(
+    *,
+    override: str,
+    public_ipv4: str | None,
+    public_dns: str | None,
+    local_hostname: str,
+) -> str:
+    if override and _is_public_facing_hostname(override):
+        return override
+    if public_ipv4:
+        return public_ipv4
+    if public_dns and _is_public_facing_hostname(public_dns):
+        return public_dns
+    if override:
+        return override
+    if _usable_hostname(local_hostname):
+        return local_hostname
+    return "localhost"
+
+
 def detect_public_host() -> dict[str, Any]:
     """Best-effort public hostname/IP for URLs shown to end users."""
     override = (os.getenv("INSTALLER_PUBLIC_HOST") or os.getenv("PUBLIC_HOST") or "").strip()
@@ -64,16 +95,12 @@ def detect_public_host() -> dict[str, Any]:
     public_dns = _ec2_metadata("public-hostname")
     local_hostname = socket.gethostname()
 
-    if override:
-        host = override
-    elif public_dns:
-        host = public_dns
-    elif public_ipv4:
-        host = public_ipv4
-    elif _usable_hostname(local_hostname):
-        host = local_hostname
-    else:
-        host = "localhost"
+    host = _resolve_access_host(
+        override=override,
+        public_ipv4=public_ipv4,
+        public_dns=public_dns,
+        local_hostname=local_hostname,
+    )
 
     installer_port = int(os.getenv("INSTALLER_PORT", "3000"))
     platform_port = int(os.getenv("PLATFORM_HTTP_PORT", "80"))
@@ -96,8 +123,12 @@ def detect_public_host() -> dict[str, Any]:
         "platform_url": platform_url,
         "security_group_ports": [installer_port, platform_port],
         "host_detection_note": (
-            "Set INSTALLER_PUBLIC_HOST to your server public IP/DNS if URLs look wrong."
-            if host in ("localhost", local_hostname) and not override
-            else None
+            "Using private EC2 hostname — set Public host to your public IP in the Config step."
+            if ".compute.internal" in host or host.startswith("ip-172-")
+            else (
+                "Set INSTALLER_PUBLIC_HOST to your server public IP/DNS if URLs look wrong."
+                if host == "localhost" and not override
+                else None
+            )
         ),
     }

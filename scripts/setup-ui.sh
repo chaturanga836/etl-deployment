@@ -12,17 +12,36 @@ if [[ ! -f config/license-public.pem ]]; then
   python3 scripts/generate-license-keys.py --out-dir config
 fi
 
+_imds_token() {
+  curl -fsS --max-time 2 -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || true
+}
+
 _public_ip() {
-  curl -fsS --max-time 2 "http://169.254.169.254/latest/meta-data/public-ipv4" 2>/dev/null || true
+  curl -fsS --max-time 2 -H "X-aws-ec2-metadata-token: $(_imds_token)" \
+    "http://169.254.169.254/latest/meta-data/public-ipv4" 2>/dev/null \
+    || curl -fsS --max-time 2 "http://169.254.169.254/latest/meta-data/public-ipv4" 2>/dev/null \
+    || true
 }
 
 _public_dns() {
-  curl -fsS --max-time 2 "http://169.254.169.254/latest/meta-data/public-hostname" 2>/dev/null || true
+  curl -fsS --max-time 2 -H "X-aws-ec2-metadata-token: $(_imds_token)" \
+    "http://169.254.169.254/latest/meta-data/public-hostname" 2>/dev/null \
+    || curl -fsS --max-time 2 "http://169.254.169.254/latest/meta-data/public-hostname" 2>/dev/null \
+    || true
 }
 
-PUBLIC_DNS="$(_public_dns)"
 PUBLIC_IP="$(_public_ip)"
-ACCESS_HOST="${PUBLIC_DNS:-${PUBLIC_IP:-$(hostname -f 2>/dev/null || hostname)}}"
+PUBLIC_DNS="$(_public_dns)"
+
+# Prefer public IP — *.compute.internal is VPC-private and not reachable from browsers.
+ACCESS_HOST="${PUBLIC_IP:-}"
+if [[ -z "$ACCESS_HOST" && -n "$PUBLIC_DNS" && "$PUBLIC_DNS" != *".compute.internal"* ]]; then
+  ACCESS_HOST="$PUBLIC_DNS"
+fi
+if [[ -z "$ACCESS_HOST" ]]; then
+  ACCESS_HOST="$(hostname -f 2>/dev/null || hostname)"
+fi
 
 echo ""
 echo "================================================================"
