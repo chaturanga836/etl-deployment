@@ -10,6 +10,9 @@ INSTALLER_BIND="${INSTALLER_BIND:-0.0.0.0}"
 if [[ ! -f config/license-public.pem || ! -f config/license-private.pem ]]; then
   echo "Generating license key pair (required for free trials)..."
   python3 scripts/generate-license-keys.py --out-dir config
+else
+  echo "Checking license key pair..."
+  python3 scripts/repair-license-keys.py --out-dir config
 fi
 
 _imds_token() {

@@ -47,24 +47,78 @@ def _generate_keypair(directory: Path) -> None:
         pass
 
 
-def _license_key_directory() -> Path:
-    """Return directory containing a usable private+public license keypair."""
+def keypair_is_valid(public_path: Path, private_path: Path) -> bool:
+    """Return True when private and public PEM files are a matching RSA pair."""
+    if not public_path.is_file() or not private_path.is_file():
+        return False
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        private_key = serialization.load_pem_private_key(
+            private_path.read_bytes(),
+            password=None,
+        )
+        public_key = serialization.load_pem_public_key(public_path.read_bytes())
+        message = b"dt-orch-license-keypair-check"
+        signature = private_key.sign(
+            message,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        public_key.verify(
+            signature,
+            message,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        return True
+    except Exception:
+        return False
+
+
+def ensure_license_keypair(directory: Path) -> Path:
+    """Create or replace keys in directory until the pair validates."""
+    directory.mkdir(parents=True, exist_ok=True)
+    public_path = directory / "license-public.pem"
+    private_path = directory / "license-private.pem"
+    if keypair_is_valid(public_path, private_path):
+        return directory
+    _generate_keypair(directory)
+    if not keypair_is_valid(public_path, private_path):
+        raise RuntimeError(f"Failed to create a valid license key pair in {directory}")
+    return directory
+
+
+def license_key_directory() -> Path:
+    """Return directory containing a usable, matching private+public license keypair."""
     config_dir = _deployment_config_dir()
-    if (config_dir / "license-private.pem").is_file() and (config_dir / "license-public.pem").is_file():
+    if keypair_is_valid(
+        config_dir / "license-public.pem",
+        config_dir / "license-private.pem",
+    ):
         return config_dir
 
     state_dir = _state_dir()
-    if (state_dir / "license-private.pem").is_file() and (state_dir / "license-public.pem").is_file():
+    if keypair_is_valid(
+        state_dir / "license-public.pem",
+        state_dir / "license-private.pem",
+    ):
         return state_dir
 
     try:
-        _generate_keypair(state_dir)
-        return state_dir
+        if os.access(config_dir, os.W_OK):
+            return ensure_license_keypair(config_dir)
+        return ensure_license_keypair(state_dir)
     except OSError as exc:
         raise FileNotFoundError(
             "Could not create license keys for free trial. "
-            "On the server run: python3 scripts/generate-license-keys.py --out-dir config"
+            "On the server run: python3 scripts/repair-license-keys.py --out-dir config"
         ) from exc
+
+
+def _license_key_directory() -> Path:
+    return license_key_directory()
 
 
 @dataclass
@@ -76,36 +130,36 @@ class LicenseInfo:
     raw_claims: dict[str, Any]
 
 
-def _public_key_path() -> Path:
+def _configured_keypair() -> tuple[Path, Path] | None:
     env_pub = os.getenv("LICENSE_PUBLIC_KEY_PATH")
     env_priv = os.getenv("LICENSE_PRIVATE_KEY_PATH")
-    if (
-        env_pub
-        and env_priv
-        and Path(env_pub).is_file()
-        and Path(env_priv).is_file()
-    ):
-        return Path(env_pub)
-    return _license_key_directory() / "license-public.pem"
+    if not env_pub or not env_priv:
+        return None
+    public_path = Path(env_pub)
+    private_path = Path(env_priv)
+    if keypair_is_valid(public_path, private_path):
+        return public_path, private_path
+    return None
+
+
+def _public_key_path() -> Path:
+    configured = _configured_keypair()
+    if configured:
+        return configured[0]
+    return license_key_directory() / "license-public.pem"
 
 
 def _private_key_path() -> Path:
-    env_pub = os.getenv("LICENSE_PUBLIC_KEY_PATH")
-    env_priv = os.getenv("LICENSE_PRIVATE_KEY_PATH")
-    if (
-        env_pub
-        and env_priv
-        and Path(env_pub).is_file()
-        and Path(env_priv).is_file()
-    ):
-        return Path(env_priv)
-    return _license_key_directory() / "license-private.pem"
+    configured = _configured_keypair()
+    if configured:
+        return configured[1]
+    return license_key_directory() / "license-private.pem"
 
 
 def _load_private_key():
     path = _private_key_path()
     if not path.is_file():
-        _license_key_directory()
+        license_key_directory()
         path = _private_key_path()
     if not path.is_file():
         raise FileNotFoundError(
@@ -144,7 +198,7 @@ def resolve_license_key(key: str | None) -> str:
 def _load_public_key() -> str:
     path = _public_key_path()
     if not path.is_file():
-        _license_key_directory()
+        license_key_directory()
         path = _public_key_path()
     if not path.is_file():
         raise FileNotFoundError(f"License public key not found: {path}")

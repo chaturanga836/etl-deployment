@@ -400,10 +400,20 @@ EOF
 
 preflight_license_key() {
   local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
-  local key_file="${root}/config/license-public.pem"
-  if [[ ! -f "$key_file" ]]; then
-    echo "ERROR: Missing ${key_file}"
-    echo "Run: python3 scripts/generate-license-keys.py --out-dir config"
+  local key_dir="${root}/config"
+  if running_installer_with_docker_sock; then
+    docker run --rm \
+      -v "${root}:/work:rw" \
+      -v "${ROOT_DIR}/scripts:/scripts:ro" \
+      -v "${ROOT_DIR}/installer:/installer:ro" \
+      python:3.12-slim \
+      sh -c 'pip install -q cryptography pyjwt >/dev/null && PYTHONPATH=/installer python3 /scripts/repair-license-keys.py --out-dir /work/config'
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHONPATH="${ROOT_DIR}/installer" python3 "${ROOT_DIR}/scripts/repair-license-keys.py" --out-dir "${key_dir}"
+  fi
+  if [[ ! -f "${key_dir}/license-public.pem" ]]; then
+    echo "ERROR: Missing ${key_dir}/license-public.pem"
+    echo "Run: python3 scripts/repair-license-keys.py --out-dir config"
     echo "Or start the setup wizard once: ./scripts/setup-ui.sh"
     exit 1
   fi

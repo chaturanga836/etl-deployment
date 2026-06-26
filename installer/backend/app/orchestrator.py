@@ -109,9 +109,13 @@ def _render_config(job: DeployJob, config: dict[str, Any]) -> Path:
         license_path.write_text(license_key, encoding="utf-8")
         os.chmod(license_path, 0o600)
 
-    public_key = DEPLOYMENT_ROOT / "config" / "license-public.pem"
-    if public_key.is_file():
-        shutil.copy2(public_key, STATE_DIR / "license-public.pem")
+    _SHARED = Path(__file__).resolve().parents[2] / "shared"
+    if str(_SHARED.parent) not in sys.path:
+        sys.path.insert(0, str(_SHARED.parent))
+    from shared.license import license_key_directory  # noqa: E402
+
+    key_dir = license_key_directory()
+    shutil.copy2(key_dir / "license-public.pem", STATE_DIR / "license-public.pem")
 
     return env_file
 
