@@ -111,6 +111,33 @@ export_deployment_host_root() {
   echo "Deployment host root for bind mounts: ${ETL_DEPLOYMENT_HOST_ROOT}"
 }
 
+cleanup_stale_host_bind_mounts() {
+  local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-$(resolve_deployment_host_root)}"
+  # When the repo lives at e.g. ~/etl-deployment but Docker once mounted /opt/etl-deployment/...,
+  # the daemon may have created empty directories there — remove them automatically.
+  if [[ "$host_root" == "/opt/etl-deployment" ]]; then
+    return 0
+  fi
+  local wrong_base="/opt/etl-deployment"
+  local rel
+  for rel in \
+    nginx/default.conf \
+    nginx/ssl.conf.template \
+    scripts/proxy-entrypoint.sh \
+    scripts/init-db.sql \
+    config/license-public.pem; do
+    [[ -f "${host_root}/${rel}" ]] || continue
+    docker run --rm -v /:/host:rw alpine:3.20 sh -c "
+      bad='/host${wrong_base}/${rel}'
+      good='/host${host_root}/${rel}'
+      if [ -d \"\$bad\" ] && [ -f \"\$good\" ]; then
+        rm -rf \"\$bad\"
+        echo \"Removed stale Docker directory: ${wrong_base}/${rel}\"
+      fi
+    " 2>/dev/null || true
+  done
+}
+
 preflight_bind_mounts() {
   local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
   local rel
@@ -373,6 +400,7 @@ maybe_enable_dev_build
 registry_login_if_configured
 preflight_registry_access
 export_deployment_host_root
+cleanup_stale_host_bind_mounts
 preflight_bind_mounts
 preflight_license_key
 prepare_runtime_env "$EF"
