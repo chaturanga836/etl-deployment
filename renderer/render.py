@@ -291,7 +291,7 @@ def render_helm_values(config: dict[str, Any]) -> dict[str, Any]:
         },
         "database": {
             "url": db_url,
-            "workspaceUrl": workspace_database_url,
+            "workspaceUrl": workspace_db_url,
         },
         "redis": {"url": _redis_url(config)},
         "secrets": {
@@ -308,7 +308,7 @@ def render_helm_values(config: dict[str, Any]) -> dict[str, Any]:
         "api": {
             "env": {
                 "DATABASE_URL": db_url,
-                "WORKSPACE_DATABASE_URL": workspace_database_url,
+                "WORKSPACE_DATABASE_URL": workspace_db_url,
                 "REDIS_URL": _redis_url(config),
                 "PLATFORM_INFRA_URL": _platform_infra_url(config),
                 "SANDBOX_ENABLED": str(app.get("sandbox_enabled", True)).lower(),
