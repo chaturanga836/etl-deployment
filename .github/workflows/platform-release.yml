@@ -1,0 +1,46 @@
+name: Platform release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump when version is empty
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: Exact platform version (e.g. 1.0.1) — skips bump
+        required: false
+        type: string
+  repository_dispatch:
+    types:
+      - platform-release
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Run platform release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+        run: |
+          bump="${{ github.event.inputs.bump || github.event.client_payload.bump || 'patch' }}"
+          version="${{ github.event.inputs.version || github.event.client_payload.version || '' }}"
+          args=(--bump "$bump")
+          if [[ -n "$version" ]]; then
+            args=(--version "$version")
+          fi
+          bash scripts/release/platform-release.sh "${args[@]}"

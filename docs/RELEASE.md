@@ -40,6 +40,25 @@ If unset, release builds use localhost defaults (fine for dev; set vars for prod
 
 ## Release a version
 
+### Automated (recommended)
+
+1. Merge fixes to `master` on app repos (e.g. `etl-back`).
+2. **Backend CI** runs lint, tests, and a **Cython release smoke build**; on success it dispatches **Platform release** in `etl-deployment`.
+3. **Platform release** bumps [VERSION](VERSION) patch, commits, and tags `vX.Y.Z` on all repos — each repo's `release.yml` publishes GHCR images.
+4. Customer upgrade (fully automated on the host):
+
+```bash
+./scripts/upgrade.sh full
+```
+
+`upgrade.sh` pulls the latest `etl-deployment` manifest, syncs `IMAGE_TAG` from `VERSION` into `.env`, pulls images, and recreates services.
+
+**One-time CI setup:** add org/repo secret `RELEASE_PAT` (PAT with `repo` + `workflow` on all DT Orch repos) to `etl-back` and `etl-deployment`.
+
+Manual trigger: **Actions → Platform release → Run workflow** (optional `version` or `bump`).
+
+### Manual tag push (legacy)
+
 Tag the **same version** on each repo (example `v1.0.0`):
 
 ```bash

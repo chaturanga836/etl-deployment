@@ -203,7 +203,8 @@ pydantic.errors.PydanticUserError: A non-annotated attribute was detected: `cors
 
 1. Move `cors_allow_origins` logic to module-level `resolve_cors_allow_origins()` in `core/config.py`
 2. Add `core/config.py` to `KEEP_PY_EXACT` in `cythonize_release.py` and `compile_release_tree.py`
-3. Rebuild and publish new API image; bump `IMAGE_TAG` in `VERSION`
+3. Merge to `master` — **Platform release** CI bumps `VERSION`, tags repos, and publishes images automatically
+4. Customer host: `./scripts/upgrade.sh full` (syncs `IMAGE_TAG` from `VERSION`, pulls, recreates)
 
 **Always kept as `.py`:** `core/config.py`, `alembic/**`, `sandbox/runner.py`
 
