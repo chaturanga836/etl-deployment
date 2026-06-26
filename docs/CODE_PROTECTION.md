@@ -2,6 +2,16 @@
 
 Self-hosted customers run your container images on **their** infrastructure. Anyone with Docker or host access can inspect containers. This document explains what protection is realistic, what we ship by default, and stronger options.
 
+## Public registry vs private git
+
+| What | Default | What customers get |
+|------|---------|-------------------|
+| Git repos (`etl-back`, `elt-frontend`, …) | **Private** | No access |
+| GHCR images (`dt-orch-api`, …) | **Public** | `docker pull` without your GitHub token |
+| Logic inside images | **Protected build** | Cython `.so`, compiled Next.js — not raw source |
+
+Making container images public on GHCR does **not** publish your git repositories. Customers download runnable binaries, not cloneable source.
+
 ## Threat model
 
 | Actor | Capability |
@@ -65,7 +75,8 @@ Smaller Python surface. Apply the same Cython pattern if you need parity.
 
 ## Additional hardening (recommended)
 
-- **Private registry only** — customers pull images; they do not build from your repos
+- **Public GHCR images, private git repos** — customers `docker pull` without your GitHub token; source repos stay private
+- **Image-level protection** — Cython `.so` and compiled frontend (see above); registry privacy is not the protection layer
 - **Secrets outside env** — vault / K8s Secrets; avoid `docker exec … env` leaking `FERNET_KEY`
 - **Limit `docker.sock`** — `infra-service` with socket access is equivalent to root on the host
 - **Non-root containers** — limits tampering, not reading

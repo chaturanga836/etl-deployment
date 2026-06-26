@@ -26,7 +26,8 @@ def _run_version(cmd: list[str]) -> str | None:
         return None
 
 
-def _registry_accessible(image: str) -> bool:
+def _registry_probe(image: str) -> tuple[bool, str | None]:
+    """Return (accessible, error_code). error_code: denied | not_found | unreachable | None."""
     try:
         result = subprocess.run(
             ["docker", "manifest", "inspect", image],
@@ -35,9 +36,16 @@ def _registry_accessible(image: str) -> bool:
             timeout=30,
             check=False,
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True, None
+        combined = (result.stderr or result.stdout or "").lower()
+        if "denied" in combined or "unauthorized" in combined:
+            return False, "denied"
+        if "not found" in combined or "manifest unknown" in combined:
+            return False, "not_found"
+        return False, "unreachable"
     except (OSError, subprocess.TimeoutExpired):
-        return False
+        return False, "unreachable"
 
 
 def check_prerequisites() -> dict[str, Any]:
@@ -48,13 +56,15 @@ def check_prerequisites() -> dict[str, Any]:
 
     defaults = load_install_defaults()
     registry_url = defaults["registry_url"]
+    registry_public = defaults.get("registry_public", True)
     image_tag = defaults["image_tag"]
     api_image = f"{registry_url}/dt-orch-api:{image_tag}"
     local_build = Path("/opt/etl-back/Dockerfile").is_file()
 
     registry_ok: bool | None = None
+    registry_error: str | None = None
     if docker is not None and not local_build:
-        registry_ok = _registry_accessible(api_image)
+        registry_ok, registry_error = _registry_probe(api_image)
 
     return {
         "docker": {"available": docker is not None, "version": docker},
@@ -66,6 +76,8 @@ def check_prerequisites() -> dict[str, Any]:
             "url": registry_url,
             "api_image": api_image,
             "accessible": registry_ok,
+            "public": registry_public,
+            "error": registry_error,
             "local_build": local_build,
         },
     }

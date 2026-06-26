@@ -213,20 +213,56 @@ export default function App() {
                 type="warning"
                 showIcon
                 style={{ marginTop: 16 }}
-                message="Registry login required before install"
+                message={
+                  prereqs.registry.public
+                    ? 'Cannot download release images'
+                    : 'Registry login required before install'
+                }
                 description={
                   <Space direction="vertical" size="small">
-                    <Text>
-                      DT Orch downloads container images from GitHub Container Registry. On the server
-                      where you ran <Text code>setup-ui.sh</Text>, open SSH and run:
-                    </Text>
-                    <Text code>
-                      echo &quot;&lt;GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;github-user&gt; --password-stdin
-                    </Text>
-                    <Text type="secondary">
-                      Use a personal access token with <Text code>read:packages</Text>. Then click
-                      Check again below.
-                    </Text>
+                    {prereqs.registry.public && prereqs.registry.error === 'denied' && (
+                      <>
+                        <Text>
+                          DT Orch release images should be publicly downloadable — you do{' '}
+                          <Text strong>not</Text> need the vendor&apos;s GitHub account or token.
+                          Images are still protected inside the container (compiled binaries, not source code).
+                        </Text>
+                        <Text>
+                          This server was denied access — the vendor must publish packages as{' '}
+                          <Text strong>public</Text> on GitHub Container Registry. Contact support if you
+                          just received this installer.
+                        </Text>
+                      </>
+                    )}
+                    {prereqs.registry.public && prereqs.registry.error === 'not_found' && (
+                      <Text>
+                        Image <Text code>{prereqs.registry.api_image}</Text> was not found. The vendor may
+                        not have published this version yet.
+                      </Text>
+                    )}
+                    {prereqs.registry.public && prereqs.registry.error === 'unreachable' && (
+                      <Text>
+                        Cannot reach <Text code>{prereqs.registry.url}</Text>. Check outbound HTTPS and
+                        firewall rules, or use an offline install bundle if your environment has no internet.
+                      </Text>
+                    )}
+                    {!prereqs.registry.public && (
+                      <>
+                        <Text>
+                          Images are in a private registry. Use <Text strong>your own</Text> GitHub account
+                          after your vendor grants you package read access — not the vendor&apos;s token.
+                        </Text>
+                        <Text>
+                          On the server where you ran <Text code>setup-ui.sh</Text>, open SSH and run:
+                        </Text>
+                        <Text code>
+                          echo &quot;&lt;YOUR_GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;your-github-user&gt; --password-stdin
+                        </Text>
+                        <Text type="secondary">
+                          Your PAT needs <Text code>read:packages</Text>.
+                        </Text>
+                      </>
+                    )}
                     <Text type="secondary">Image: <Text code>{prereqs.registry.api_image}</Text></Text>
                     <Button loading={prereqsLoading} onClick={refreshPrereqs}>
                       Check again
@@ -240,7 +276,11 @@ export default function App() {
                 type="success"
                 showIcon
                 style={{ marginTop: 16 }}
-                message="Registry reachable — ready to install"
+                message={
+                  prereqs.registry.public
+                    ? 'Release images available — no GitHub login required'
+                    : 'Registry reachable — ready to install'
+                }
               />
             )}
             {prereqs && (
@@ -262,7 +302,9 @@ export default function App() {
                             : prereqs.registry.accessible === true
                               ? 'reachable'
                               : prereqs.registry.accessible === false
-                                ? 'denied — docker login required'
+                                ? prereqs.registry.public
+                                  ? `unavailable (${prereqs.registry.error ?? 'error'})`
+                                  : 'denied — your GitHub login required'
                                 : 'not checked'}
                         </Text>
                       )}

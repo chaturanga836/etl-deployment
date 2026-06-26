@@ -151,8 +151,13 @@ preflight_registry_access() {
   cat <<EOF
 ERROR: Cannot pull ${image} (registry denied or image not found).
 
-If images are in a private registry, authenticate on the Docker host before installing:
-  echo "<PAT>" | docker login ghcr.io -u <github-username> --password-stdin
+Default DT Orch releases use public GHCR packages — customers do not need the vendor GitHub token.
+If pulls are denied, the vendor must run:
+  ./scripts/release/set-packages-public.sh
+
+If you use a private registry instead, authenticate with your own credentials (after the vendor
+grants package access):
+  echo "<YOUR_PAT>" | docker login ghcr.io -u <your-github-username> --password-stdin
 
 Or set in .env (optional):
   REGISTRY_USER=<github-username>

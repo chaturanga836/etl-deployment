@@ -9,6 +9,8 @@ export type Prerequisites = {
     url: string;
     api_image: string;
     accessible: boolean | null;
+    public: boolean;
+    error: string | null;
     local_build: boolean;
   };
 };
@@ -20,6 +22,7 @@ export type InstallDefaults = {
   image_tag: string;
   components: { id: string; label: string }[];
   end_user_managed: boolean;
+  registry_public: boolean;
   description: string;
 };
 

@@ -27,9 +27,14 @@ def _deployment_root() -> Path:
     return Path(os.getenv("ETL_DEPLOYMENT_ROOT", "/opt/etl-deployment"))
 
 
-def _parse_version_file(path: Path) -> tuple[str, str]:
+def _parse_bool(value: str) -> bool:
+    return value.strip().strip("\"'").lower() in ("true", "yes", "1")
+
+
+def _parse_version_file(path: Path) -> tuple[str, str, bool]:
     platform = _DEFAULT_PLATFORM
     registry_url = _DEFAULT_REGISTRY
+    registry_public = True
     in_registry = False
 
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -42,14 +47,15 @@ def _parse_version_file(path: Path) -> tuple[str, str]:
             in_registry = True
         elif in_registry and line.startswith("url:"):
             registry_url = line.split(":", 1)[1].strip().strip("\"'")
-            in_registry = False
+        elif in_registry and line.startswith("public:"):
+            registry_public = _parse_bool(line.split(":", 1)[1])
         elif re.match(r"^[a-z_]+:", line):
             in_registry = False
 
     if registry_url == "ghcr.io/YOUR_GITHUB_ORG":
         registry_url = _DEFAULT_REGISTRY
 
-    return platform, registry_url
+    return platform, registry_url, registry_public
 
 
 def _platform_to_tag(platform: str) -> str:
@@ -62,9 +68,10 @@ def load_install_defaults() -> dict[str, Any]:
     version_file = root / "VERSION"
     platform = _DEFAULT_PLATFORM
     registry_url = _DEFAULT_REGISTRY
+    registry_public = True
 
     if version_file.is_file():
-        platform, registry_url = _parse_version_file(version_file)
+        platform, registry_url, registry_public = _parse_version_file(version_file)
 
     image_tag = _platform_to_tag(platform)
     components = [
@@ -76,6 +83,7 @@ def load_install_defaults() -> dict[str, Any]:
         "app_name": "DT Orch",
         "platform_version": platform,
         "registry_url": registry_url,
+        "registry_public": registry_public,
         "image_tag": image_tag,
         "components": components,
         "end_user_managed": True,

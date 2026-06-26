@@ -9,10 +9,28 @@ Images are published to **GitHub Container Registry (GHCR)** on git tag push (`v
 | `baas-infra` | `platform-infra-repo` | `infra-service/Dockerfile` |
 | `dt-orch-scraper` | `etl-deployment` | `scraper-service/Dockerfile` |
 
+## Registry model (customers vs source code)
+
+| Asset | Visibility | Customer needs |
+|-------|------------|----------------|
+| **Git repos** (`etl-back`, etc.) | Private | Nothing — no repo access |
+| **GHCR container images** | **Public** (default) | `docker pull` only — **no GitHub token** |
+| **Source inside images** | Protected | Cython `.so`, compiled Next.js — see [CODE_PROTECTION.md](CODE_PROTECTION.md) |
+
+Public images do **not** expose your git history or raw Python/TypeScript source. Protection is **in the image build**, not registry login.
+
+Release CI sets each package to **public** automatically after push. For images already published as private, run once:
+
+```bash
+gh auth login
+./scripts/release/set-packages-public.sh chaturanga836
+```
+
+Set `registry.public: false` in [VERSION](VERSION) only for enterprise customers who pull from a private mirror (they use **their own** GitHub PAT after you grant package access — never your token).
+
 ## One-time setup (GitHub)
 
-1. **Package visibility** — After first push, set packages to public or grant customer read access under org settings.
-2. **Frontend build URLs (optional)** — In `elt-frontend` repo → Settings → Secrets and variables → Actions → Variables:
+1. **Frontend build URLs (optional)** — In `elt-frontend` repo → Settings → Secrets and variables → Actions → Variables:
    - `NEXT_PUBLIC_API_URL` (e.g. `https://studio.example.com/api/v1`)
    - `NEXT_PUBLIC_KC_URL`
    - `NEXT_PUBLIC_KC_REALM` (default `workspace-realm`)
@@ -60,10 +78,12 @@ INFRA_IMAGE=${REGISTRY_URL}/baas-infra:${IMAGE_TAG}
 SCRAPER_IMAGE=${REGISTRY_URL}/dt-orch-scraper:${IMAGE_TAG}
 ```
 
-Login before pull (private packages):
+No `docker login` required when packages are public (default).
+
+Private packages (optional enterprise): customer uses **their** GitHub account after you grant read access:
 
 ```bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+echo $THEIR_GITHUB_TOKEN | docker login ghcr.io -u THEIR_USERNAME --password-stdin
 ```
 
 ## Manual push (no GitHub Actions)
@@ -72,6 +92,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 export REGISTRY=ghcr.io/your-org
 export VERSION=v1.0.0
 ./scripts/release/build-and-push.sh all
+./scripts/release/set-packages-public.sh your-org
 ```
 
 Run from `etl-deployment` with sibling repos checked out.

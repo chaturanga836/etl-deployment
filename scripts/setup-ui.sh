@@ -73,9 +73,17 @@ if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
 else
   registry_url="$(grep -E '^[[:space:]]*url:' VERSION 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
   registry_url="${registry_url:-ghcr.io/YOUR_GITHUB_ORG}"
+  registry_public="$(grep -E '^[[:space:]]*public:' VERSION 2>/dev/null | head -1 | sed -E 's/.*(true|false).*/\1/')"
+  registry_public="${registry_public:-true}"
   echo "  Images will be pulled from ${registry_url}."
-  echo "  If the registry is private, log in on this host before you click Install:"
-  echo "    echo \"<GITHUB_PAT>\" | docker login ghcr.io -u <github-username> --password-stdin"
+  if [[ "$registry_public" == "true" ]]; then
+    echo "  Public registry — customers do not need a GitHub token."
+    echo "  Source code stays private; images ship compiled/protected builds."
+    echo "  Vendor: run ./scripts/release/set-packages-public.sh if pulls are denied."
+  else
+    echo "  Private registry — customer logs in with their own GitHub PAT (read:packages)"
+    echo "    after you grant package access. Not the vendor token."
+  fi
   echo ""
 fi
 

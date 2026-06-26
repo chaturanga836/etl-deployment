@@ -54,7 +54,8 @@ Configure names via `DTORC_METADATA_DB_NAME`, `DTORC_WORKSPACE_DB_NAME`, and `DA
 ## Prerequisites
 
 - Docker 24+ with Compose v2
-- For customer installs: access to private registry (`REGISTRY_URL`)
+- Outbound HTTPS to pull public release images from GHCR (no GitHub account or token required)
+- For air-gapped / closed-boundary sites: offline install bundle (see vendor)
 - For dev builds: sibling repos `etl-back`, `elt-frontend`, `platform-infra-repo` checked out next to this repo
 
 ## Quick start — monolith (PoC)

@@ -5,6 +5,7 @@ platform: "1.0.0"
 
 registry:
   url: "ghcr.io/chaturanga836"
+  public: true
 
 images:
   api: "dt-orch-api"
