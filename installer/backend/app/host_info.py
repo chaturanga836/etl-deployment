@@ -30,7 +30,7 @@ def detect_public_host() -> dict[str, Any]:
     local_hostname = socket.gethostname()
 
     host = public_dns or public_ipv4 or local_hostname or "localhost"
-    installer_port = int(os.getenv("INSTALLER_PORT", "9080"))
+    installer_port = int(os.getenv("INSTALLER_PORT", "3000"))
     platform_port = int(os.getenv("PLATFORM_HTTP_PORT", "80"))
 
     scheme = "http"

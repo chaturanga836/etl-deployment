@@ -22,7 +22,7 @@ The guided installer is a **browser UI** — no manual `.env` editing. Collect s
 # Script prints the browser URL (EC2 public DNS/IP when available)
 ```
 
-Open the URL shown in the terminal (default port **9080**). On AWS EC2, allow inbound **TCP 9080** (wizard) and **TCP 80** (platform after install) in the security group.
+Open the URL shown in the terminal (default port **3000**). On AWS EC2, allow inbound **TCP 3000** (wizard) and **TCP 80** (platform after install) in the security group.
 
 Wizard steps: Welcome → Deployment target (monolith / distributed / Kubernetes) → Registry → Super Admin → Database → License (optional trial) → Target config → Review → **Install** → Login URL.
 

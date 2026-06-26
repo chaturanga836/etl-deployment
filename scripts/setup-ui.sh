@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-INSTALLER_PORT="${INSTALLER_PORT:-9080}"
+INSTALLER_PORT="${INSTALLER_PORT:-3000}"
 INSTALLER_BIND="${INSTALLER_BIND:-0.0.0.0}"
 
 if [[ ! -f config/license-public.pem ]]; then

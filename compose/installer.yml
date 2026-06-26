@@ -1,5 +1,5 @@
 # DT Orch setup wizard — run before the platform is installed.
-# Listens on 0.0.0.0:9080 by default (set INSTALLER_BIND / INSTALLER_PORT).
+# Listens on 0.0.0.0:3000 by default (set INSTALLER_BIND / INSTALLER_PORT).
 
 services:
   installer:
@@ -8,7 +8,7 @@ services:
       dockerfile: installer/Dockerfile
     container_name: dt-orch-installer
     ports:
-      - "${INSTALLER_BIND:-0.0.0.0}:${INSTALLER_PORT:-9080}:8080"
+      - "${INSTALLER_BIND:-0.0.0.0}:${INSTALLER_PORT:-3000}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/opt/etl-deployment:ro
@@ -18,7 +18,7 @@ services:
       INSTALLER_STATE_DIR: /opt/etl-deployment-state
       LICENSE_PUBLIC_KEY_PATH: /opt/etl-deployment/config/license-public.pem
       LICENSE_PRIVATE_KEY_PATH: /opt/etl-deployment/config/license-private.pem
-      INSTALLER_PORT: ${INSTALLER_PORT:-9080}
+      INSTALLER_PORT: ${INSTALLER_PORT:-3000}
     restart: unless-stopped
 
 volumes:
