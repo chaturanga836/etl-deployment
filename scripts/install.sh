@@ -89,6 +89,80 @@ if changed:
 PY
 }
 
+apply_version_defaults_to_env() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 0
+  python3 - "$env_file" "$ROOT_DIR/VERSION" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+env_path = Path(sys.argv[1])
+version_path = Path(sys.argv[2])
+
+registry = "ghcr.io/chaturanga836"
+image_tag = "v1.0.0"
+
+if version_path.is_file():
+    in_registry = False
+    for raw in version_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("platform:"):
+            platform = line.split(":", 1)[1].strip().strip("\"'")
+            image_tag = platform if platform.startswith("v") else f"v{platform}"
+        elif line.startswith("registry:"):
+            in_registry = True
+        elif in_registry and line.startswith("url:"):
+            url = line.split(":", 1)[1].strip().strip("\"'")
+            if url and url != "ghcr.io/YOUR_GITHUB_ORG":
+                registry = url
+        elif re.match(r"^[a-z_]+:", line):
+            in_registry = False
+
+text = env_path.read_text(encoding="utf-8")
+if "YOUR_GITHUB_ORG" not in text:
+    sys.exit(0)
+
+image_lines = {
+    "API_IMAGE": "dt-orch-api",
+    "FRONTEND_IMAGE": "dt-orch-frontend",
+    "INFRA_IMAGE": "baas-infra",
+    "SCRAPER_IMAGE": "dt-orch-scraper",
+}
+lines = text.splitlines()
+changed = False
+out = []
+for line in lines:
+    if line.lstrip().startswith("#") or not line.strip():
+        out.append(line)
+        continue
+    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
+    if not match:
+        out.append(line)
+        continue
+    key, val = match.group(1), match.group(2)
+    if key == "REGISTRY_URL":
+        out.append(f"REGISTRY_URL={registry}")
+        changed = True
+        continue
+    if key == "IMAGE_TAG":
+        out.append(f"IMAGE_TAG={image_tag}")
+        changed = True
+        continue
+    if key in image_lines and "YOUR_GITHUB_ORG" in val:
+        out.append(f"{key}=${{REGISTRY_URL}}/{image_lines[key]}:${{IMAGE_TAG}}")
+        changed = True
+        continue
+    out.append(line)
+
+if changed:
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    print(f"Applied registry defaults from VERSION to {env_path}")
+PY
+}
+
 ensure_env() {
   local env_file=".env"
   if [[ -n "$STATE_DIR" && -f "${STATE_DIR}/.env" ]]; then
@@ -108,6 +182,7 @@ ensure_env() {
     resolved="$ROOT_DIR/$resolved"
   fi
   repair_env_file_for_shell "$resolved"
+  apply_version_defaults_to_env "$resolved"
   ENV_FILE="${ENV_FILE:-$env_file}"
 }
 
