@@ -42,7 +42,7 @@ const USER_STEP_LABELS = [
   'Install type',
   'Your account',
   'Database',
-  'Trial',
+  'License',
   'Web address',
   'Confirm',
   'Installing',
@@ -66,7 +66,9 @@ export default function App() {
   const [prereqs, setPrereqs] = useState<Prerequisites | null>(null);
   const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
   const [installDefaults, setInstallDefaults] = useState<InstallDefaults | null>(null);
-  const [trialInfo, setTrialInfo] = useState<string | null>(null);
+  const [licenseMode, setLicenseMode] = useState<'license' | 'trial'>('license');
+  const [licenseValidated, setLicenseValidated] = useState(false);
+  const [licenseInfo, setLicenseInfo] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [loginUrl, setLoginUrl] = useState('');
   const [deployError, setDeployError] = useState('');
@@ -124,17 +126,21 @@ export default function App() {
   const update = (patch: Partial<WizardState>) => setWizard((w) => ({ ...w, ...patch }));
 
   const next = async () => {
-    if (step === 5 && wizard.license_key) {
+    if (step === 5 && licenseMode === 'trial') {
       try {
-        await validateLicense(wizard.license_key);
+        const trial = await requestTrialLicense();
+        update({ license_key: trial.license_key });
+        setLicenseInfo(`Free trial until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
       } catch (e) {
-        message.error(e instanceof Error ? e.message : 'Invalid license');
+        message.error(e instanceof Error ? e.message : 'Could not start free trial');
         return;
       }
     }
     if (step === 8) return;
     setStep((s) => skipPackagesStep(s, 1));
   };
+
+  const nextDisabled = step === 5 && licenseMode === 'license' && !licenseValidated;
 
   const back = () => setStep((s) => skipPackagesStep(s, -1));
 
@@ -294,51 +300,85 @@ export default function App() {
         );
       case 5:
         return (
-          <Card title="Trial">
-            <Paragraph>
-              Start with a <Text strong>3-month free trial</Text>. No license key is required.
-            </Paragraph>
-            <Button type="primary" size="large" onClick={async () => {
-              try {
-                const trial = await requestTrialLicense();
-                update({ license_key: trial.license_key });
-                setTrialInfo(`Trial active until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
-                message.success('Free trial ready');
-              } catch (e) {
-                message.error(e instanceof Error ? e.message : 'Could not start trial');
-              }
-            }}>
-              Activate free trial
-            </Button>
-            {trialInfo && <Paragraph style={{ marginTop: 12 }}><Text type="success">{trialInfo}</Text></Paragraph>}
-            <Collapse
-              ghost
-              style={{ marginTop: 16 }}
-              items={[{
-                key: 'license',
-                label: 'I already have a license key',
-                children: (
-                  <Form layout="vertical">
-                    <Form.Item label="License key">
-                      <Input.TextArea rows={3} value={wizard.license_key} onChange={(e) => update({ license_key: e.target.value })} />
-                    </Form.Item>
-                    {wizard.license_key && (
-                      <Button onClick={async () => {
-                        try {
-                          await validateLicense(wizard.license_key);
-                          message.success('License accepted');
-                        } catch (e) {
-                          message.error(e instanceof Error ? e.message : 'Invalid license');
-                        }
-                      }}>Check license</Button>
-                    )}
-                  </Form>
-                ),
-              }]}
-            />
-            <Paragraph type="secondary" style={{ marginTop: 12 }}>
-              If you skip this page, a trial is applied automatically when you install.
-            </Paragraph>
+          <Card title="License">
+            <Radio.Group
+              value={licenseMode}
+              onChange={(e) => {
+                const mode = e.target.value as 'license' | 'trial';
+                setLicenseMode(mode);
+                setLicenseValidated(false);
+                setLicenseInfo(null);
+                update({ license_key: '' });
+              }}
+              style={{ marginBottom: 16 }}
+            >
+              <Space direction="vertical">
+                <Radio value="license">
+                  <Text strong>Activate license</Text>
+                  <br />
+                  <Text type="secondary">I have a license key from my vendor.</Text>
+                </Radio>
+                <Radio value="trial">
+                  <Text strong>Free trial</Text>
+                  <br />
+                  <Text type="secondary">3-month trial — no license key required.</Text>
+                </Radio>
+              </Space>
+            </Radio.Group>
+            {licenseMode === 'license' && (
+              <Form layout="vertical">
+                <Form.Item label="License key" required>
+                  <Input.TextArea
+                    rows={4}
+                    value={wizard.license_key}
+                    onChange={(e) => {
+                      update({ license_key: e.target.value });
+                      setLicenseValidated(false);
+                      setLicenseInfo(null);
+                    }}
+                    placeholder="Paste your license key here"
+                  />
+                </Form.Item>
+                <Space>
+                  <Button
+                    type="primary"
+                    disabled={!wizard.license_key.trim()}
+                    onClick={async () => {
+                      try {
+                        const info = await validateLicense(wizard.license_key);
+                        setLicenseValidated(true);
+                        setLicenseInfo(
+                          `Valid — ${info.edition} edition${info.expires_at ? `, expires ${info.expires_at.slice(0, 10)}` : ''}`,
+                        );
+                        message.success('License validated');
+                      } catch (e) {
+                        setLicenseValidated(false);
+                        setLicenseInfo(null);
+                        message.error(e instanceof Error ? e.message : 'Invalid license');
+                      }
+                    }}
+                  >
+                    Validate license
+                  </Button>
+                  {licenseValidated && licenseInfo && (
+                    <Text type="success">{licenseInfo}</Text>
+                  )}
+                </Space>
+                {!licenseValidated && (
+                  <Paragraph type="secondary" style={{ marginTop: 12 }}>
+                    Validate your license before continuing.
+                  </Paragraph>
+                )}
+              </Form>
+            )}
+            {licenseMode === 'trial' && (
+              <Alert
+                type="info"
+                showIcon
+                message="Free trial selected"
+                description="Click Next to activate your 3-month trial and continue."
+              />
+            )}
           </Card>
         );
       case 6:
@@ -406,8 +446,10 @@ export default function App() {
               <Descriptions.Item label="Database">
                 {wizard.database.source === 'bundled' ? 'Included with install' : 'Your existing database'}
               </Descriptions.Item>
-              <Descriptions.Item label="Trial">
-                {wizard.license_key ? 'License / trial ready' : '3-month trial (at install)'}
+              <Descriptions.Item label="License">
+                {licenseMode === 'trial' || !wizard.license_key
+                  ? '3-month free trial'
+                  : 'Licensed'}
               </Descriptions.Item>
               <Descriptions.Item label="Website">
                 {wizard.monolith.public_host
@@ -480,7 +522,7 @@ export default function App() {
         {step > 0 && step < 8 && step !== 7 && (
           <Space style={{ marginTop: 16 }}>
             <Button onClick={back}>Back</Button>
-            <Button type="primary" onClick={next}>Next</Button>
+            <Button type="primary" onClick={next} disabled={nextDisabled}>Next</Button>
           </Space>
         )}
         {step === 0 && (

@@ -13,6 +13,15 @@ from typing import Any
 from urllib.parse import quote_plus
 
 
+def _env_line(key: str, value: Any) -> str:
+    """Format a shell-safe .env line (install.sh sources this file)."""
+    text = "" if value is None else str(value)
+    if text and not any(c.isspace() or c in "#$`!&|;()<>" for c in text):
+        return f"{key}={text}"
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+    return f'{key}="{escaped}"'
+
+
 def _public_base_url(host: str, port: int, use_proxy: bool) -> str:
     if use_proxy and port == 80:
         return f"http://{host}"
@@ -167,7 +176,7 @@ def render_env(config: dict[str, Any]) -> str:
         "NEXT_PUBLIC_BUILD_ID=production",
         "",
         f"POSTGRES_USER={pg_user}",
-        f"POSTGRES_PASSWORD={pg_password}",
+        _env_line("POSTGRES_PASSWORD", pg_password),
         "POSTGRES_DB=postgres",
         f"DTORC_METADATA_DB_NAME={metadata_db}",
         f"DTORC_WORKSPACE_DB_NAME={db.get('workspace_db_name', 'dtorc_workspace')}",
@@ -178,7 +187,7 @@ def render_env(config: dict[str, Any]) -> str:
         f"REDIS_URL={_redis_url(config)}",
         f"SANDBOX_ENABLED={'true' if app.get('sandbox_enabled', True) else 'false'}",
         "",
-        f"APP_NAME={app.get('name', 'DT Orch')}",
+        _env_line("APP_NAME", app.get("name", "DT Orch")),
         "DEBUG=false",
         "",
     ])
@@ -190,7 +199,7 @@ def render_env(config: dict[str, Any]) -> str:
         lines.extend([
             f"KEYCLOAK_PORT={keycloak_port}",
             f"KC_ADMIN_USER={kc['admin_user']}",
-            f"KC_ADMIN_PASSWORD={kc['admin_password']}",
+            _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
             "KC_SERVER_URL=http://keycloak:8080",
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
@@ -204,7 +213,7 @@ def render_env(config: dict[str, Any]) -> str:
     else:
         lines.extend([
             f"KC_ADMIN_USER={kc['admin_user']}",
-            f"KC_ADMIN_PASSWORD={kc['admin_password']}",
+            _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
             f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'admin-cli')}",
@@ -217,11 +226,11 @@ def render_env(config: dict[str, Any]) -> str:
     super_email = superadmin.get("email") or f"{superadmin.get('username', 'admin')}@users.local"
 
     lines.extend([
-        f"LICENSE_KEY={license_key}",
+        _env_line("LICENSE_KEY", license_key),
         "DTORCH_SETUP_COMPLETE=false",
         f"INSTALL_BOOTSTRAP_TOKEN={bootstrap_token}",
-        f"SUPERADMIN_USERNAME={superadmin.get('username', '')}",
-        f"SUPERADMIN_EMAIL={super_email}",
+        _env_line("SUPERADMIN_USERNAME", superadmin.get("username", "")),
+        _env_line("SUPERADMIN_EMAIL", super_email),
         "",
     ])
 
