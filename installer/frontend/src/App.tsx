@@ -73,6 +73,18 @@ export default function App() {
   const [loginUrl, setLoginUrl] = useState('');
   const [deployError, setDeployError] = useState('');
   const [alreadyInstalled, setAlreadyInstalled] = useState<{ login_url?: string } | null>(null);
+  const [prereqsLoading, setPrereqsLoading] = useState(false);
+
+  const refreshPrereqs = useCallback(async () => {
+    setPrereqsLoading(true);
+    try {
+      setPrereqs(await fetchPrerequisites());
+    } catch {
+      message.error('Could not run system check');
+    } finally {
+      setPrereqsLoading(false);
+    }
+  }, []);
 
   const onComplete = useCallback((url: string) => {
     setLoginUrl(url);
@@ -198,18 +210,37 @@ export default function App() {
             )}
             {prereqs?.registry && prereqs.registry.accessible === false && (
               <Alert
-                type="error"
+                type="warning"
                 showIcon
                 style={{ marginTop: 16 }}
-                message="Cannot pull platform images from the registry"
+                message="Registry login required before install"
                 description={
-                  <Text>
-                    Log in on this EC2 host, then retry install:{' '}
-                    <Text code>echo &quot;&lt;GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;github-user&gt; --password-stdin</Text>
-                    <br />
-                    Image: <Text code>{prereqs.registry.api_image}</Text>
-                  </Text>
+                  <Space direction="vertical" size="small">
+                    <Text>
+                      DT Orch downloads container images from GitHub Container Registry. On the server
+                      where you ran <Text code>setup-ui.sh</Text>, open SSH and run:
+                    </Text>
+                    <Text code>
+                      echo &quot;&lt;GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;github-user&gt; --password-stdin
+                    </Text>
+                    <Text type="secondary">
+                      Use a personal access token with <Text code>read:packages</Text>. Then click
+                      Check again below.
+                    </Text>
+                    <Text type="secondary">Image: <Text code>{prereqs.registry.api_image}</Text></Text>
+                    <Button loading={prereqsLoading} onClick={refreshPrereqs}>
+                      Check again
+                    </Button>
+                  </Space>
                 }
+              />
+            )}
+            {prereqs?.registry && prereqs.registry.accessible === true && (
+              <Alert
+                type="success"
+                showIcon
+                style={{ marginTop: 16 }}
+                message="Registry reachable — ready to install"
               />
             )}
             {prereqs && (
