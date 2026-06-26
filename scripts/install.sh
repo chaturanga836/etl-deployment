@@ -89,19 +89,49 @@ resolve_env_file() {
   echo "$path"
 }
 
+bind_mount_rel_paths() {
+  printf '%s\n' \
+    nginx/default.conf \
+    nginx/ssl.conf.template \
+    scripts/proxy-entrypoint.sh \
+    scripts/init-db.sql \
+    config/license-public.pem
+}
+
+running_installer_with_docker_sock() {
+  [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]
+}
+
+host_path_from_mountinfo() {
+  awk '$5 == "/opt/etl-deployment" { gsub(/\\040/, " ", $4); print $4; exit }' /proc/self/mountinfo 2>/dev/null || true
+}
+
 resolve_deployment_host_root() {
   local root="$ROOT_DIR"
   # Wizard container sees the repo at /opt/etl-deployment; host Docker needs the real checkout path.
-  if [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]; then
+  if running_installer_with_docker_sock; then
     local host_root=""
     local container_name="${INSTALLER_CONTAINER_NAME:-dt-orch-installer}"
     host_root="$(docker inspect "$container_name" --format '{{ range .Mounts }}{{ if eq .Destination "/opt/etl-deployment" }}{{ .Source }}{{ end }}{{ end }}' 2>/dev/null || true)"
     if [[ -z "$host_root" ]]; then
       host_root="$(docker inspect "$HOSTNAME" --format '{{ range .Mounts }}{{ if eq .Destination "/opt/etl-deployment" }}{{ .Source }}{{ end }}{{ end }}' 2>/dev/null || true)"
     fi
-    if [[ -n "$host_root" && -d "$host_root" ]]; then
-      root="$host_root"
+    if [[ -z "$host_root" ]]; then
+      host_root="$(host_path_from_mountinfo)"
     fi
+    if [[ -z "$host_root" || ! -d "$host_root" ]]; then
+      cat <<'EOF' >&2
+ERROR: Cannot resolve the host path for /opt/etl-deployment bind mounts.
+
+The setup wizard runs inside a container but starts platform containers on the host Docker
+daemon. Host bind mounts must use the real checkout path (e.g. /home/ubuntu/etl-deployment),
+not /opt/etl-deployment inside the container.
+
+Ensure compose/installer.yml still mounts the repo at /opt/etl-deployment and retry.
+EOF
+      exit 1
+    fi
+    root="$host_root"
   fi
   echo "$root"
 }
@@ -113,41 +143,50 @@ export_deployment_host_root() {
 
 cleanup_stale_host_bind_mounts() {
   local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-$(resolve_deployment_host_root)}"
-  # When the repo lives at e.g. ~/etl-deployment but Docker once mounted /opt/etl-deployment/...,
-  # the daemon may have created empty directories there — remove them automatically.
-  if [[ "$host_root" == "/opt/etl-deployment" ]]; then
-    return 0
-  fi
   local wrong_base="/opt/etl-deployment"
   local rel
-  for rel in \
-    nginx/default.conf \
-    nginx/ssl.conf.template \
-    scripts/proxy-entrypoint.sh \
-    scripts/init-db.sql \
-    config/license-public.pem; do
-    [[ -f "${host_root}/${rel}" ]] || continue
-    docker run --rm -v /:/host:rw alpine:3.20 sh -c "
-      bad='/host${wrong_base}/${rel}'
-      good='/host${host_root}/${rel}'
-      if [ -d \"\$bad\" ] && [ -f \"\$good\" ]; then
-        rm -rf \"\$bad\"
-        echo \"Removed stale Docker directory: ${wrong_base}/${rel}\"
-      fi
-    " 2>/dev/null || true
-  done
+  while IFS= read -r rel; do
+    if running_installer_with_docker_sock; then
+      docker run --rm -v /:/host:rw alpine:3.20 sh -c "
+        p=\"/host${host_root}/${rel}\"
+        if [ -d \"\$p\" ]; then
+          rm -rf \"\$p\"
+          echo \"Removed stale Docker directory: ${host_root}/${rel}\"
+        fi
+        if [ \"${host_root}\" != \"${wrong_base}\" ] && [ -f \"/host${host_root}/${rel}\" ]; then
+          bad=\"/host${wrong_base}/${rel}\"
+          if [ -d \"\$bad\" ]; then
+            rm -rf \"\$bad\"
+            echo \"Removed stale Docker directory: ${wrong_base}/${rel}\"
+          fi
+        fi
+      " 2>/dev/null || true
+    elif [[ -d "${host_root}/${rel}" ]]; then
+      rm -rf "${host_root}/${rel}"
+      echo "Removed stale Docker directory: ${host_root}/${rel}"
+    fi
+  done < <(bind_mount_rel_paths)
 }
 
 preflight_bind_mounts() {
   local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
   local rel
-  for rel in \
-    nginx/default.conf \
-    nginx/ssl.conf.template \
-    scripts/proxy-entrypoint.sh \
-    scripts/init-db.sql \
-    config/license-public.pem; do
+  while IFS= read -r rel; do
     local path="${root}/${rel}"
+    if running_installer_with_docker_sock; then
+      if docker run --rm -v "${root}:/mnt:ro" alpine:3.20 test -f "/mnt/${rel}"; then
+        continue
+      fi
+      echo "ERROR: Required file missing on host for Docker bind mount: ${path}"
+      if docker run --rm -v /:/host:ro alpine:3.20 test -d "/host${path}"; then
+        echo "That host path is a DIRECTORY (Docker created it when the real file was missing)."
+        echo "Remove it on the host, then retry: sudo rm -rf \"${path}\""
+        if [[ -f "${ROOT_DIR}/${rel}" ]]; then
+          echo "Then restore the file from the repo: cp \"${ROOT_DIR}/${rel}\" \"${path}\""
+        fi
+      fi
+      exit 1
+    fi
     if [[ -f "$path" ]]; then
       continue
     fi
@@ -157,7 +196,7 @@ preflight_bind_mounts() {
       echo "Remove it, then retry: rm -rf \"${path}\""
     fi
     exit 1
-  done
+  done < <(bind_mount_rel_paths)
 }
 
 local_dev_sources_available() {
