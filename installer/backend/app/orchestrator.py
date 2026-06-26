@@ -70,22 +70,6 @@ async def _stream_process(job: DeployJob, cmd: list[str], *, cwd: Path, env: dic
     return await proc.wait()
 
 
-async def _free_installer_port(job: DeployJob) -> None:
-    """Stop setup wizard container so monolith services can bind host ports."""
-    job.push_phase("prepare")
-    job.push_log("Stopping setup wizard to free ports for the platform...")
-    for cmd in (
-        ["docker", "stop", "dt-orch-installer"],
-        ["docker", "rm", "dt-orch-installer"],
-    ):
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
-
-
 def _render_config(job: DeployJob, config: dict[str, Any]) -> Path:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     config_path = STATE_DIR / "deployment.json"
@@ -196,8 +180,8 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
 
 async def deploy_monolith(job: DeployJob, config: dict[str, Any]) -> str:
     env_path = _render_config(job, config)
-    await _free_installer_port(job)
     job.push_phase("deploy")
+    job.push_log("Starting platform containers...")
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_path)
     env["STATE_DIR"] = str(STATE_DIR)
