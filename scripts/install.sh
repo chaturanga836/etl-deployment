@@ -218,6 +218,16 @@ running_installer_with_docker_sock() {
   [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]
 }
 
+host_deployment_root_exists() {
+  local host_root="$1"
+  [[ -n "$host_root" ]] || return 1
+  if running_installer_with_docker_sock; then
+    docker run --rm -v /:/host:ro alpine:3.20 test -d "/host${host_root}"
+    return
+  fi
+  [[ -d "$host_root" ]]
+}
+
 host_path_from_mountinfo() {
   awk '$5 == "/opt/etl-deployment" { gsub(/\\040/, " ", $4); print $4; exit }' /proc/self/mountinfo 2>/dev/null || true
 }
@@ -226,7 +236,13 @@ resolve_deployment_host_root() {
   local root="$ROOT_DIR"
   # Wizard container sees the repo at /opt/etl-deployment; host Docker needs the real checkout path.
   if running_installer_with_docker_sock; then
-    local host_root=""
+    local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-}"
+    if [[ -n "$host_root" ]] && host_deployment_root_exists "$host_root"; then
+      echo "$host_root"
+      return 0
+    fi
+
+    host_root=""
     local container_name="${INSTALLER_CONTAINER_NAME:-dt-orch-installer}"
     host_root="$(docker inspect "$container_name" --format '{{ range .Mounts }}{{ if eq .Destination "/opt/etl-deployment" }}{{ .Source }}{{ end }}{{ end }}' 2>/dev/null || true)"
     if [[ -z "$host_root" ]]; then
@@ -235,7 +251,7 @@ resolve_deployment_host_root() {
     if [[ -z "$host_root" ]]; then
       host_root="$(host_path_from_mountinfo)"
     fi
-    if [[ -z "$host_root" || ! -d "$host_root" ]]; then
+    if ! host_deployment_root_exists "$host_root"; then
       cat <<'EOF' >&2
 ERROR: Cannot resolve the host path for /opt/etl-deployment bind mounts.
 
@@ -243,17 +259,25 @@ The setup wizard runs inside a container but starts platform containers on the h
 daemon. Host bind mounts must use the real checkout path (e.g. /home/ubuntu/etl-deployment),
 not /opt/etl-deployment inside the container.
 
+Start the wizard with ./scripts/setup-ui.sh (sets ETL_DEPLOYMENT_HOST_ROOT automatically), or
+export ETL_DEPLOYMENT_HOST_ROOT to your checkout path before starting the installer.
+
 Ensure compose/installer.yml still mounts the repo at /opt/etl-deployment and retry.
 EOF
-      exit 1
+      return 1
     fi
-    root="$host_root"
+    echo "$host_root"
+    return 0
   fi
   echo "$root"
 }
 
 export_deployment_host_root() {
-  export ETL_DEPLOYMENT_HOST_ROOT="$(resolve_deployment_host_root)"
+  local resolved=""
+  if ! resolved="$(resolve_deployment_host_root)"; then
+    exit 1
+  fi
+  export ETL_DEPLOYMENT_HOST_ROOT="$resolved"
   echo "Deployment host root for bind mounts: ${ETL_DEPLOYMENT_HOST_ROOT}"
 }
 
@@ -285,7 +309,13 @@ cleanup_stale_host_bind_mounts() {
 }
 
 preflight_bind_mounts() {
-  local root="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
+  local root="${ETL_DEPLOYMENT_HOST_ROOT:-}"
+  if running_installer_with_docker_sock && [[ -z "$root" ]]; then
+    echo "ERROR: ETL_DEPLOYMENT_HOST_ROOT is not set inside the setup wizard container."
+    echo "Restart the wizard with: ./scripts/setup-ui.sh"
+    exit 1
+  fi
+  root="${root:-$ROOT_DIR}"
   local rel
   while IFS= read -r rel; do
     local path="${root}/${rel}"

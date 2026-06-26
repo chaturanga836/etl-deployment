@@ -15,6 +15,7 @@ services:
       - installer_state:/opt/etl-deployment-state
     environment:
       ETL_DEPLOYMENT_ROOT: /opt/etl-deployment
+      ETL_DEPLOYMENT_HOST_ROOT: ${ETL_DEPLOYMENT_HOST_ROOT:-}
       INSTALLER_STATE_DIR: /opt/etl-deployment-state
       LICENSE_PUBLIC_KEY_PATH: /opt/etl-deployment/config/license-public.pem
       LICENSE_PRIVATE_KEY_PATH: /opt/etl-deployment/config/license-private.pem

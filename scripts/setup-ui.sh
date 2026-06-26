@@ -66,6 +66,7 @@ echo "================================================================"
 echo ""
 
 export INSTALLER_PORT INSTALLER_BIND INSTALLER_PUBLIC_HOST="$ACCESS_HOST"
+export ETL_DEPLOYMENT_HOST_ROOT="$ROOT_DIR"
 
 INSTALLER_COMPOSE=(compose/installer.yml)
 if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
