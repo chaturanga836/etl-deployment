@@ -80,6 +80,20 @@ env_file_path() {
   fi
 }
 
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+    return
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+    return
+  fi
+  echo "ERROR: Docker Compose is not available (docker compose plugin or docker-compose binary)."
+  echo "Install docker-compose-plugin: https://docs.docker.com/compose/install/linux/"
+  exit 1
+}
+
 generate_secrets_if_missing() {
   local ef
   ef="$(env_file_path)"
@@ -190,7 +204,7 @@ set +a
 
 if [[ -n "$ROLE" ]]; then
   echo "Ensuring Docker networks exist..."
-  docker compose -f compose/networks.yml up -d
+  docker_compose -f compose/networks.yml up -d
 
   read -r -a COMPOSE_ARGS <<< "$(compose_files)"
   SCALE_ARGS=()
@@ -205,7 +219,7 @@ if [[ -n "$ROLE" ]]; then
 
   echo "Starting role: ${ROLE}..."
   # shellcheck disable=SC2086
-  docker compose "${COMPOSE_ARGS[@]}" --env-file "$EF" up -d "${BUILD_ARGS[@]}" "${SCALE_ARGS[@]}"
+  docker_compose "${COMPOSE_ARGS[@]}" --env-file "$EF" up -d "${BUILD_ARGS[@]}" "${SCALE_ARGS[@]}"
   echo "Role ${ROLE} started."
   exit 0
 fi
@@ -229,7 +243,7 @@ fi
 
 echo "Starting DT Orch (profile: ${PROFILE})..."
 # shellcheck disable=SC2086
-docker compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"
+docker_compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"
 
 if [[ "$PROFILE" == "frontend" ]]; then
   echo "Frontend profile started. Open http://localhost:${FRONTEND_PORT:-3000}"
@@ -248,7 +262,7 @@ for i in $(seq 1 60); do
     break
   fi
   if [[ "$i" -eq 60 ]]; then
-    echo "Health check timed out. Inspect logs with: docker compose logs"
+    echo "Health check timed out. Inspect logs with: docker compose logs (or docker-compose logs)"
     exit 1
   fi
   sleep 2
