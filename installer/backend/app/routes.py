@@ -23,6 +23,7 @@ from app.host_info import detect_public_host
 from app.jobs import JobStatus, create_job, get_job
 from app.orchestrator import STATE_DIR, run_deploy_job
 from app.prerequisites import check_prerequisites
+from app.release_manifest import load_install_defaults
 
 router = APIRouter(prefix="/api")
 
@@ -57,6 +58,11 @@ class DeployRequest(BaseModel):
     kc_realm: str = "workspace-realm"
     kc_admin_user: str = "admin"
     kc_admin_password: str | None = None
+
+
+@router.get("/install-defaults")
+def install_defaults() -> dict[str, Any]:
+    return load_install_defaults()
 
 
 @router.get("/prerequisites")
@@ -130,6 +136,17 @@ def validate_license(body: LicenseValidateRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _apply_install_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    defaults = load_install_defaults()
+    if not payload.get("registry_url") or payload["registry_url"] == "ghcr.io/YOUR_GITHUB_ORG":
+        payload["registry_url"] = defaults["registry_url"]
+    if not payload.get("image_tag"):
+        payload["image_tag"] = defaults["image_tag"]
+    if not payload.get("app_name"):
+        payload["app_name"] = defaults["app_name"]
+    return payload
+
+
 @router.post("/deploy")
 async def start_deploy(body: DeployRequest) -> dict[str, str]:
     try:
@@ -138,7 +155,7 @@ async def start_deploy(body: DeployRequest) -> dict[str, str]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job = create_job()
-    payload = body.model_dump()
+    payload = _apply_install_defaults(body.model_dump())
     payload["license_key"] = license_key
     asyncio.create_task(run_deploy_job(job, payload))
     return {"job_id": job.id}

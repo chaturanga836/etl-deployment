@@ -4,6 +4,8 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
+  Descriptions,
   Form,
   Input,
   InputNumber,
@@ -18,6 +20,7 @@ import {
 import {
   defaultWizard,
   fetchHostInfo,
+  fetchInstallDefaults,
   fetchInstallState,
   fetchPrerequisites,
   requestTrialLicense,
@@ -25,6 +28,7 @@ import {
   validateDatabase,
   validateLicense,
   type HostInfo,
+  type InstallDefaults,
   type Prerequisites,
   type WizardState,
 } from './api';
@@ -36,7 +40,7 @@ const { Title, Paragraph, Text, Link } = Typography;
 const STEP_LABELS = [
   'Welcome',
   'Target',
-  'Registry',
+  'Packages',
   'Super Admin',
   'Database',
   'License',
@@ -51,6 +55,8 @@ export default function App() {
   const [wizard, setWizard] = useState<WizardState>(defaultWizard);
   const [prereqs, setPrereqs] = useState<Prerequisites | null>(null);
   const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
+  const [installDefaults, setInstallDefaults] = useState<InstallDefaults | null>(null);
+  const [showAdvancedRegistry, setShowAdvancedRegistry] = useState(false);
   const [trialInfo, setTrialInfo] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [loginUrl, setLoginUrl] = useState('');
@@ -70,6 +76,15 @@ export default function App() {
 
   useEffect(() => {
     fetchPrerequisites().then(setPrereqs).catch(() => message.error('Could not load prerequisites'));
+    fetchInstallDefaults().then((defaults) => {
+      setInstallDefaults(defaults);
+      setWizard((w) => ({
+        ...w,
+        registry_url: defaults.registry_url,
+        image_tag: defaults.image_tag,
+        app_name: defaults.app_name,
+      }));
+    }).catch(() => {});
     fetchHostInfo().then((info) => {
       setHostInfo(info);
       setWizard((w) => ({
@@ -165,8 +180,8 @@ export default function App() {
               />
             )}
             <Paragraph>
-              Steps: choose deployment target → registry → super admin → database → license (optional trial) →
-              host settings → review → one-click install.
+              Steps: deployment target → official packages → super admin → database →
+              license (optional trial) → host settings → review → install.
             </Paragraph>
             {prereqs && (
               <Space direction="vertical">
@@ -198,18 +213,53 @@ export default function App() {
         );
       case 2:
         return (
-          <Card title="Container registry">
-            <Form layout="vertical">
-              <Form.Item label="Registry URL">
-                <Input value={wizard.registry_url} onChange={(e) => update({ registry_url: e.target.value })} />
-              </Form.Item>
-              <Form.Item label="Image tag">
-                <Input value={wizard.image_tag} onChange={(e) => update({ image_tag: e.target.value })} />
-              </Form.Item>
-              <Form.Item label="Application name">
-                <Input value={wizard.app_name} onChange={(e) => update({ app_name: e.target.value })} />
-              </Form.Item>
-            </Form>
+          <Card title="Official DT Orch packages">
+            <Alert
+              type="success"
+              showIcon
+              message="Pre-configured for this install"
+              description={installDefaults?.description ?? 'Official release packages are selected automatically. Click Next to continue.'}
+              style={{ marginBottom: 16 }}
+            />
+            <Descriptions bordered size="small" column={1} style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="Product">{wizard.app_name}</Descriptions.Item>
+              <Descriptions.Item label="Version">{installDefaults?.platform_version ?? wizard.image_tag.replace(/^v/, '')}</Descriptions.Item>
+              <Descriptions.Item label="Release">{wizard.image_tag}</Descriptions.Item>
+            </Descriptions>
+            {installDefaults?.images && (
+              <Descriptions bordered size="small" column={1} title="Components" style={{ marginBottom: 16 }}>
+                {installDefaults.images.map((img) => (
+                  <Descriptions.Item key={img.role} label={img.role}>
+                    <Text code style={{ fontSize: 11 }}>{img.reference}</Text>
+                  </Descriptions.Item>
+                ))}
+              </Descriptions>
+            )}
+            <Paragraph type="secondary">
+              You do not need to enter registry details. Only change these if your vendor gave you a private mirror.
+            </Paragraph>
+            <Collapse
+              ghost
+              activeKey={showAdvancedRegistry ? ['advanced'] : []}
+              onChange={(keys) => setShowAdvancedRegistry(keys.includes('advanced'))}
+              items={[{
+                key: 'advanced',
+                label: 'Advanced: custom registry (optional)',
+                children: (
+                  <Form layout="vertical">
+                    <Form.Item label="Registry URL">
+                      <Input value={wizard.registry_url} onChange={(e) => update({ registry_url: e.target.value })} />
+                    </Form.Item>
+                    <Form.Item label="Image tag">
+                      <Input value={wizard.image_tag} onChange={(e) => update({ image_tag: e.target.value })} />
+                    </Form.Item>
+                    <Form.Item label="Application name">
+                      <Input value={wizard.app_name} onChange={(e) => update({ app_name: e.target.value })} />
+                    </Form.Item>
+                  </Form>
+                ),
+              }]}
+            />
           </Card>
         );
       case 3:
@@ -369,7 +419,8 @@ export default function App() {
             <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, overflow: 'auto' }}>
               {JSON.stringify({
                 mode: wizard.deployment_mode,
-                registry: wizard.registry_url,
+                product: wizard.app_name,
+                version: wizard.image_tag,
                 superadmin: wizard.superadmin_username,
                 database: wizard.database.source,
                 license: wizard.license_key ? '(set)' : '(3-month trial at install)',

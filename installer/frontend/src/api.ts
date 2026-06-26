@@ -7,6 +7,16 @@ export type Prerequisites = {
   kubectl: { available: boolean; version: string | null };
 };
 
+export type InstallDefaults = {
+  app_name: string;
+  platform_version: string;
+  registry_url: string;
+  image_tag: string;
+  images: { role: string; name: string; reference: string }[];
+  end_user_managed: boolean;
+  description: string;
+};
+
 export type HostInfo = {
   public_ipv4: string | null;
   public_dns: string | null;
@@ -68,7 +78,7 @@ export type WizardState = {
 
 export const defaultWizard: WizardState = {
   deployment_mode: 'monolith',
-  registry_url: 'ghcr.io/YOUR_GITHUB_ORG',
+  registry_url: 'ghcr.io/chaturanga836',
   image_tag: 'v1.0.0',
   app_name: 'DT Orch',
   superadmin_username: '',
@@ -111,6 +121,11 @@ export const defaultWizard: WizardState = {
     remote_path: '/opt/etl-deployment',
   },
 };
+
+export async function fetchInstallDefaults(): Promise<InstallDefaults> {
+  const r = await fetch(`${API}/install-defaults`);
+  return r.json();
+}
 
 export async function fetchHostInfo(): Promise<HostInfo> {
   const r = await fetch(`${API}/host-info`);
