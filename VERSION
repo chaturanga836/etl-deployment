@@ -1,7 +1,7 @@
 # DT Orch — platform release manifest
 # CI: tag app repos vX.Y.Z, push images, then update this file and tag etl-deployment.
 
-platform: "1.0.0"
+platform: "1.0.1"
 
 registry:
   url: "ghcr.io/chaturanga836"
