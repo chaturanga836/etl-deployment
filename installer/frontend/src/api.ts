@@ -214,6 +214,30 @@ export async function startDeploy(wizard: WizardState): Promise<string> {
   return data.job_id as string;
 }
 
+export type UpgradeInfo = {
+  installed: boolean;
+  current_tag?: string;
+  available_tag?: string;
+  platform_version?: string;
+  upgrade_available?: boolean;
+  login_url?: string | null;
+};
+
+export async function fetchUpgradeInfo(): Promise<UpgradeInfo> {
+  const r = await fetch(`${API}/upgrade-info`);
+  return r.json();
+}
+
+export async function startUpgrade(): Promise<string> {
+  const r = await fetch(`${API}/upgrade`, { method: 'POST' });
+  if (!r.ok) {
+    const err = await r.json();
+    throw new Error(err.detail || 'Upgrade failed to start');
+  }
+  const data = await r.json();
+  return data.job_id as string;
+}
+
 export async function fetchInstallState() {
   const r = await fetch(`${API}/install-state`);
   return r.json();

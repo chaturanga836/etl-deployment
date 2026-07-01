@@ -21,6 +21,12 @@ PHASES: dict[str, dict[str, Any]] = {
     "bootstrap_admin": {"label": "Creating administrator account", "progress": 90},
     "finalize": {"label": "Finalizing installation", "progress": 95},
     "complete": {"label": "Installation complete", "progress": 100},
+    "upgrade_starting": {"label": "Starting upgrade", "progress": 5},
+    "upgrade_sync": {"label": "Syncing release version", "progress": 15},
+    "upgrade_pull": {"label": "Pulling new images", "progress": 40},
+    "upgrade_recreate": {"label": "Recreating services", "progress": 70},
+    "upgrade_health": {"label": "Verifying platform health", "progress": 90},
+    "upgrade_complete": {"label": "Upgrade complete", "progress": 100},
 }
 
 _LOG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -33,6 +39,10 @@ _LOG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"bootstrap-keycloak-realm", re.I), "bootstrap_keycloak"),
     (re.compile(r"bootstrap-superadmin", re.I), "bootstrap_admin"),
     (re.compile(r"setup/complete|Health check passed", re.I), "finalize"),
+    (re.compile(r"Upgrading to image tag", re.I), "upgrade_sync"),
+    (re.compile(r"Pulling images", re.I), "upgrade_pull"),
+    (re.compile(r"Recreating services", re.I), "upgrade_recreate"),
+    (re.compile(r"Waiting for API health|All health checks passed|Upgrade complete", re.I), "upgrade_health"),
 ]
 
 

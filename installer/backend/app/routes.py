@@ -21,9 +21,9 @@ from shared.license import issue_trial_license, resolve_license_key, validate_li
 
 from app.host_info import detect_public_host
 from app.jobs import JobStatus, create_job, get_job
-from app.orchestrator import STATE_DIR, run_deploy_job
+from app.orchestrator import STATE_DIR, _resolve_env_path, _read_env_value, run_deploy_job, run_upgrade_job
 from app.prerequisites import check_prerequisites
-from app.release_manifest import load_install_defaults
+from app.release_manifest import compare_versions, load_install_defaults, load_platform_release
 
 router = APIRouter(prefix="/api")
 
@@ -77,6 +77,50 @@ def install_state() -> dict[str, Any]:
         return {"installed": False}
     data = json.loads(path.read_text(encoding="utf-8"))
     return {"installed": True, **data}
+
+
+@router.get("/upgrade-info")
+def upgrade_info() -> dict[str, Any]:
+    env_path = _resolve_env_path()
+    if env_path is None:
+        return {"installed": False, "upgrade_available": False}
+
+    platform_version, available_tag = load_platform_release()
+    current_tag = _read_env_value(env_path, "IMAGE_TAG") or "v1.0.0"
+    login_url = None
+    state_path = STATE_DIR / "install-state.json"
+    if state_path.is_file():
+        login_url = json.loads(state_path.read_text(encoding="utf-8")).get("login_url")
+
+    if not login_url:
+        app_url = _read_env_value(env_path, "APP_URL")
+        if app_url:
+            login_url = f"{app_url.rstrip('/')}/login"
+
+    return {
+        "installed": True,
+        "current_tag": current_tag,
+        "available_tag": available_tag,
+        "platform_version": platform_version,
+        "upgrade_available": compare_versions(current_tag, available_tag) < 0,
+        "login_url": login_url,
+    }
+
+
+@router.post("/upgrade")
+async def start_upgrade() -> dict[str, str]:
+    info = upgrade_info()
+    if not info.get("installed"):
+        raise HTTPException(status_code=400, detail="No installation found (.env missing).")
+    if not info.get("upgrade_available"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Already on {info.get('current_tag')}; no newer release available.",
+        )
+
+    job = create_job()
+    asyncio.create_task(run_upgrade_job(job))
+    return {"job_id": job.id}
 
 
 @router.post("/validate/database")

@@ -23,13 +23,16 @@ import {
   fetchInstallDefaults,
   fetchInstallState,
   fetchPrerequisites,
+  fetchUpgradeInfo,
   requestTrialLicense,
   startDeploy,
+  startUpgrade,
   validateDatabase,
   validateLicense,
   type HostInfo,
   type InstallDefaults,
   type Prerequisites,
+  type UpgradeInfo,
   type WizardState,
 } from './api';
 import { useDeployEvents } from './useDeployEvents';
@@ -99,6 +102,8 @@ export default function App() {
   const [loginUrl, setLoginUrl] = useState('');
   const [deployError, setDeployError] = useState('');
   const [alreadyInstalled, setAlreadyInstalled] = useState<{ login_url?: string } | null>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
+  const [jobKind, setJobKind] = useState<'deploy' | 'upgrade'>('deploy');
   const [prereqsLoading, setPrereqsLoading] = useState(false);
   const [dbValidated, setDbValidated] = useState(false);
   const [accountTouched, setAccountTouched] = useState(false);
@@ -117,6 +122,7 @@ export default function App() {
   const onComplete = useCallback((url: string) => {
     setLoginUrl(url);
     setStep(9);
+    fetchUpgradeInfo().then(setUpgradeInfo).catch(() => {});
   }, []);
   const onError = useCallback((msg: string) => {
     setDeployError(msg);
@@ -161,6 +167,14 @@ export default function App() {
         setStep(9);
       }
     });
+    fetchUpgradeInfo().then((info) => {
+      setUpgradeInfo(info);
+      if (info.installed && info.login_url) {
+        setLoginUrl(info.login_url);
+        setAlreadyInstalled((prev) => prev ?? { login_url: info.login_url ?? undefined });
+        setStep(9);
+      }
+    }).catch(() => {});
   }, []);
 
   const update = (patch: Partial<WizardState>) => setWizard((w) => ({ ...w, ...patch }));
@@ -214,12 +228,25 @@ export default function App() {
 
   const runDeploy = async () => {
     setDeployError('');
+    setJobKind('deploy');
     try {
       const id = await startDeploy(wizard);
       setJobId(id);
       setStep(8);
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Install failed');
+    }
+  };
+
+  const runUpgrade = async () => {
+    setDeployError('');
+    setJobKind('upgrade');
+    try {
+      const id = await startUpgrade();
+      setJobId(id);
+      setStep(8);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Upgrade failed');
     }
   };
 
@@ -712,8 +739,12 @@ export default function App() {
         );
       case 8:
         return (
-          <Card title="Installing…">
-            <Paragraph>Please wait while DT Orch is installed. This may take several minutes.</Paragraph>
+          <Card title={jobKind === 'upgrade' ? 'Upgrading…' : 'Installing…'}>
+            <Paragraph>
+              {jobKind === 'upgrade'
+                ? 'Please wait while DT Orch is upgraded. Your data will be kept.'
+                : 'Please wait while DT Orch is installed. This may take several minutes.'}
+            </Paragraph>
             {phase.label && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -738,19 +769,52 @@ export default function App() {
         );
       case 9:
         return (
-          <Result
-            status="success"
-            title="DT Orch is ready"
-            subTitle={alreadyInstalled ? 'DT Orch is already installed on this server.' : 'You can sign in now.'}
-            extra={[
-              <Paragraph key="u">
-                Open:{' '}
-                <Link href={loginUrl} target="_blank" rel="noreferrer">{loginUrl || '/login'}</Link>
-              </Paragraph>,
-              <Paragraph key="a">Administrator: <Text strong>{wizard.superadmin_username || '—'}</Text></Paragraph>,
-              <Button type="primary" key="go" href={loginUrl || '/login'}>Open DT Orch</Button>,
-            ]}
-          />
+          <>
+            <Result
+              status="success"
+              title={jobKind === 'upgrade' && !deployError ? 'Upgrade complete' : 'DT Orch is ready'}
+              subTitle={
+                alreadyInstalled && jobKind !== 'upgrade'
+                  ? 'DT Orch is already installed on this server.'
+                  : jobKind === 'upgrade'
+                    ? `DT Orch is now on ${upgradeInfo?.current_tag ?? 'the latest release'}.`
+                    : 'You can sign in now.'
+              }
+              extra={[
+                <Paragraph key="u">
+                  Open:{' '}
+                  <Link href={loginUrl} target="_blank" rel="noreferrer">{loginUrl || '/login'}</Link>
+                </Paragraph>,
+                wizard.superadmin_username ? (
+                  <Paragraph key="a">Administrator: <Text strong>{wizard.superadmin_username}</Text></Paragraph>
+                ) : null,
+                <Button type="primary" key="go" href={loginUrl || '/login'}>Open DT Orch</Button>,
+              ].filter(Boolean)}
+            />
+            {upgradeInfo?.upgrade_available && (
+              <Card title="Software update available" style={{ marginTop: 16 }}>
+                <Paragraph>
+                  Installed: <Text code>{upgradeInfo.current_tag}</Text>
+                  {' → '}
+                  Available: <Text code>{upgradeInfo.available_tag}</Text>
+                </Paragraph>
+                <Paragraph type="secondary">
+                  Upgrades pull new release images and restart platform services. Your database and settings are kept.
+                </Paragraph>
+                <Button type="primary" size="large" onClick={runUpgrade}>
+                  Upgrade to {upgradeInfo.available_tag}
+                </Button>
+              </Card>
+            )}
+            {upgradeInfo?.installed && !upgradeInfo.upgrade_available && upgradeInfo.current_tag && (
+              <Alert
+                type="success"
+                showIcon
+                style={{ marginTop: 16 }}
+                message={`DT Orch is up to date (${upgradeInfo.current_tag})`}
+              />
+            )}
+          </>
         );
       default:
         return null;

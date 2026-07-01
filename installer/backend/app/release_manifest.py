@@ -63,6 +63,40 @@ def _platform_to_tag(platform: str) -> str:
     return platform if platform.startswith("v") else f"v{platform}"
 
 
+def _semver_tuple(version: str) -> tuple[int, ...]:
+    normalized = version.strip().lstrip("v")
+    parts: list[int] = []
+    for part in normalized.split("."):
+        if not part.isdigit():
+            break
+        parts.append(int(part))
+    return tuple(parts) if parts else (0,)
+
+
+def compare_versions(left: str, right: str) -> int:
+    """Return -1 if left < right, 0 if equal, 1 if left > right."""
+    a = _semver_tuple(left)
+    b = _semver_tuple(right)
+    length = max(len(a), len(b))
+    a_padded = a + (0,) * (length - len(a))
+    b_padded = b + (0,) * (length - len(b))
+    if a_padded < b_padded:
+        return -1
+    if a_padded > b_padded:
+        return 1
+    return 0
+
+
+def load_platform_release() -> tuple[str, str]:
+    """Return (platform_version without v, image_tag with v)."""
+    root = _deployment_root()
+    version_file = root / "VERSION"
+    platform = _DEFAULT_PLATFORM
+    if version_file.is_file():
+        platform, _, _ = _parse_version_file(version_file)
+    return platform, _platform_to_tag(platform)
+
+
 def load_install_defaults() -> dict[str, Any]:
     root = _deployment_root()
     version_file = root / "VERSION"

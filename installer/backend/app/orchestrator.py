@@ -17,10 +17,41 @@ import httpx
 from app.config_builder import build_deployment_config
 from app.deploy_phases import phase_from_log_line
 from app.jobs import DeployJob, JobStatus
+from app.release_manifest import compare_versions, load_platform_release
 
 DEPLOYMENT_ROOT = Path(os.getenv("ETL_DEPLOYMENT_ROOT", "/opt/etl-deployment"))
 STATE_DIR = Path(os.getenv("INSTALLER_STATE_DIR", "/opt/etl-deployment-state"))
 SCRIPTS_DIR = DEPLOYMENT_ROOT / "scripts"
+
+
+def _resolve_env_path() -> Path | None:
+    """Match upgrade.sh / install.sh env file resolution."""
+    if STATE_DIR.is_dir() and (STATE_DIR / ".env").is_file():
+        return STATE_DIR / ".env"
+    root_env = DEPLOYMENT_ROOT / ".env"
+    if root_env.is_file():
+        return root_env
+    return None
+
+
+def _read_env_value(env_path: Path, key: str) -> str | None:
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if line.strip().startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() == key:
+            return value.strip()
+    return None
+
+
+def _upgrade_runtime_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["STATE_DIR"] = str(STATE_DIR)
+    env["ETL_DEPLOYMENT_HOST_ROOT"] = os.getenv("ETL_DEPLOYMENT_HOST_ROOT", str(DEPLOYMENT_ROOT))
+    env_path = _resolve_env_path()
+    if env_path is not None:
+        env["ENV_FILE"] = str(env_path)
+    return env
 
 
 def _installer_dev_build() -> bool:
@@ -372,10 +403,60 @@ async def run_deploy_job(job: DeployJob, wizard: dict[str, Any]) -> None:
             "completed_at": job.created_at.isoformat(),
             "mode": mode,
             "login_url": login_url,
+            "image_tag": config.get("app", {}).get("image_tag")
+            or config.get("registry", {}).get("image_tag"),
         }
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         (STATE_DIR / "install-state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
         job.push_phase("complete")
+        job.complete(login_url)
+    except Exception as exc:
+        job.fail(str(exc))
+        job.push_log(f"ERROR: {exc}")
+
+
+async def run_upgrade_job(job: DeployJob) -> None:
+    job.status = JobStatus.RUNNING
+    job.push_phase("upgrade_starting")
+    try:
+        env_path = _resolve_env_path()
+        if env_path is None:
+            raise RuntimeError("No installation found (.env missing). Run install first.")
+
+        current_tag = _read_env_value(env_path, "IMAGE_TAG") or "v1.0.0"
+        _, available_tag = load_platform_release()
+        if compare_versions(current_tag, available_tag) >= 0:
+            raise RuntimeError(f"Already on {current_tag}; no newer release in VERSION.")
+
+        job.push_phase("upgrade_sync")
+        upgrade_sh = SCRIPTS_DIR / "upgrade.sh"
+        code = await _stream_process(
+            job,
+            ["bash", str(upgrade_sh), "full"],
+            cwd=DEPLOYMENT_ROOT,
+            env=_upgrade_runtime_env(),
+        )
+        if code != 0:
+            raise RuntimeError(f"upgrade.sh exited with code {code}")
+
+        login_url = _login_url_from_env(env_path)
+        new_tag = _read_env_value(env_path, "IMAGE_TAG") or available_tag
+
+        state_path = STATE_DIR / "install-state.json"
+        state: dict[str, Any] = {}
+        if state_path.is_file():
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "upgraded_at": job.created_at.isoformat(),
+                "login_url": login_url,
+                "image_tag": new_tag,
+            }
+        )
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+        job.push_phase("upgrade_complete")
         job.complete(login_url)
     except Exception as exc:
         job.fail(str(exc))
