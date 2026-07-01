@@ -13,7 +13,8 @@ if [[ -f "${ENV_FILE:-.env}" ]]; then
 fi
 
 API_URL="${HEALTH_URL:-${APP_URL:-http://localhost}/health}"
-INFRA_URL="${PLATFORM_INFRA_URL:-http://localhost:9000}/health"
+# PLATFORM_INFRA_URL is for containers (http://infra-service:9000). Host probes use localhost.
+INFRA_URL="${INFRA_HEALTH_URL:-http://localhost:${INFRA_SERVICE_PORT:-9000}/health}"
 
 fail=0
 

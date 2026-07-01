@@ -59,6 +59,6 @@ echo "Recreating services..."
 # shellcheck disable=SC2086
 docker compose "${compose_args[@]}" --profile "$PROFILE" --env-file "$env_file" up -d --force-recreate
 
-ENV_FILE="$env_file" "${ROOT_DIR}/scripts/health-check.sh"
+ENV_FILE="$env_file" bash "${ROOT_DIR}/scripts/health-check.sh"
 
 echo "Upgrade complete."
