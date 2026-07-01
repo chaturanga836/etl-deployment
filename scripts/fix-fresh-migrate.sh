@@ -113,6 +113,131 @@ sed -i "s/op.drop_table('pipeline_logic')/op.execute('DROP TABLE IF EXISTS pipel
 sed -i "s/op.drop_table('pipeline_tasks')/op.execute('DROP TABLE IF EXISTS pipeline_tasks CASCADE')/" \
   "$VERSIONS/2026_05_17_1103-7c1ff7df67cf_drop_pipe_task_table_and_logic_tables.py"
 
+python3 << 'PYEOF'
+from pathlib import Path
+
+versions = Path("/app/alembic/versions")
+
+def patch(path: str, old: str, new: str) -> None:
+    p = versions / path
+    text = p.read_text()
+    if old not in text:
+        if new.split("\n", 1)[0] in text:
+            return
+        raise SystemExit(f"patch miss: {path}")
+    p.write_text(text.replace(old, new, 1))
+
+def ensure_import(path: str) -> None:
+    p = versions / path
+    text = p.read_text()
+    if "from migration_helpers import table_exists" in text:
+        return
+    text = text.replace(
+        "from alembic import op\n",
+        "from alembic import op\n\nfrom migration_helpers import table_exists\n",
+        1,
+    )
+    p.write_text(text)
+
+patch(
+    "2026_05_25_1300-d4e5f6a7b8c9_add_graph_structure_columns.py",
+    """def upgrade() -> None:
+    op.add_column("pipelines", sa.Column("graph_structure", sa.JSON(), nullable=True))
+    op.add_column("workflows", sa.Column("graph_structure", sa.JSON(), nullable=True))
+    op.add_column("pipeline_runs", sa.Column("graph_snapshot", sa.JSON(), nullable=True))
+    op.add_column("workflow_runs", sa.Column("graph_snapshot", sa.JSON(), nullable=True))""",
+    """def upgrade() -> None:
+    op.add_column("pipelines", sa.Column("graph_structure", sa.JSON(), nullable=True))
+    op.add_column("workflows", sa.Column("graph_structure", sa.JSON(), nullable=True))
+    if table_exists("pipeline_runs"):
+        op.add_column("pipeline_runs", sa.Column("graph_snapshot", sa.JSON(), nullable=True))
+    if table_exists("workflow_runs"):
+        op.add_column("workflow_runs", sa.Column("graph_snapshot", sa.JSON(), nullable=True))""",
+)
+ensure_import("2026_05_25_1300-d4e5f6a7b8c9_add_graph_structure_columns.py")
+
+patch(
+    "2026_05_28_1200-a7b8c9d0e1f2_plugin_platform.py",
+    """    op.add_column("pipeline_runs", sa.Column("input_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    op.add_column("workflow_runs", sa.Column("input_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True))""",
+    """    if table_exists("pipeline_runs"):
+        op.add_column("pipeline_runs", sa.Column("input_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    if table_exists("workflow_runs"):
+        op.add_column("workflow_runs", sa.Column("input_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True))""",
+)
+ensure_import("2026_05_28_1200-a7b8c9d0e1f2_plugin_platform.py")
+
+patch(
+    "2026_06_08_1200-c1d2e3f4a5b6_run_context_checkpoints.py",
+    """def upgrade() -> None:
+    op.add_column("pipeline_runs", sa.Column("run_context", sa.JSON(), nullable=True))
+    op.add_column(
+        "pipeline_runs",
+        sa.Column("current_step_index", sa.Integer(), nullable=True),
+    )
+    op.add_column("pipeline_runs", sa.Column("parent_workflow_run_id", sa.Integer(), nullable=True))
+    op.add_column(
+        "pipeline_runs",
+        sa.Column("parent_workflow_node_uuid", sa.String(length=64), nullable=True),
+    )
+    op.add_column("workflow_runs", sa.Column("run_context", sa.JSON(), nullable=True))
+    op.add_column("workflow_runs", sa.Column("current_step_index", sa.Integer(), nullable=True))
+    op.add_column(
+        "workflow_runs",
+        sa.Column("current_node_uuid", sa.String(length=64), nullable=True),
+    )""",
+    """def upgrade() -> None:
+    if table_exists("pipeline_runs"):
+        op.add_column("pipeline_runs", sa.Column("run_context", sa.JSON(), nullable=True))
+        op.add_column(
+            "pipeline_runs",
+            sa.Column("current_step_index", sa.Integer(), nullable=True),
+        )
+        op.add_column("pipeline_runs", sa.Column("parent_workflow_run_id", sa.Integer(), nullable=True))
+        op.add_column(
+            "pipeline_runs",
+            sa.Column("parent_workflow_node_uuid", sa.String(length=64), nullable=True),
+        )
+    if table_exists("workflow_runs"):
+        op.add_column("workflow_runs", sa.Column("run_context", sa.JSON(), nullable=True))
+        op.add_column("workflow_runs", sa.Column("current_step_index", sa.Integer(), nullable=True))
+        op.add_column(
+            "workflow_runs",
+            sa.Column("current_node_uuid", sa.String(length=64), nullable=True),
+        )""",
+)
+ensure_import("2026_06_08_1200-c1d2e3f4a5b6_run_context_checkpoints.py")
+
+patch(
+    "2026_06_09_1200-d2e3f4a5b6c7_pipeline_backfill_batch.py",
+    """def upgrade() -> None:
+    op.add_column(
+        "pipeline_runs",
+        sa.Column("backfill_batch_id", sa.String(length=36), nullable=True),
+    )
+    op.create_index(
+        "ix_pipeline_runs_backfill_batch_id",
+        "pipeline_runs",
+        ["backfill_batch_id"],
+        unique=False,
+    )""",
+    """def upgrade() -> None:
+    if not table_exists("pipeline_runs"):
+        return
+    op.add_column(
+        "pipeline_runs",
+        sa.Column("backfill_batch_id", sa.String(length=36), nullable=True),
+    )
+    op.create_index(
+        "ix_pipeline_runs_backfill_batch_id",
+        "pipeline_runs",
+        ["backfill_batch_id"],
+        unique=False,
+    )""",
+)
+ensure_import("2026_06_09_1200-d2e3f4a5b6c7_pipeline_backfill_batch.py")
+PYEOF
+
 echo "Running alembic upgrade head..."
 alembic upgrade head
 echo "Migrations complete."
