@@ -29,6 +29,8 @@ fi
 
 bash "${ROOT_DIR}/scripts/release/sync-env-from-version.sh" "$env_file" "${ROOT_DIR}/VERSION"
 
+export ENV_FILE="$env_file"
+
 # shellcheck disable=SC1091
 set -a
 source "$env_file"
