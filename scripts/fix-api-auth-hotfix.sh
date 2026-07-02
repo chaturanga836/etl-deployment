@@ -40,8 +40,9 @@ apply_hotfix dt-orch-api
 apply_hotfix dt-orch-worker
 
 echo "Reloading API and worker to pick up hotfix..."
-docker exec dt-orch-api supervisorctl restart etl-api
-docker restart dt-orch-worker >/dev/null
+# supervisorctl is unavailable (no control socket in supervisord.conf); restart the
+# containers instead — docker restart keeps copied files and relaunches uvicorn/celery.
+docker restart dt-orch-api dt-orch-worker >/dev/null
 
 # shellcheck disable=SC1091
 set -a
