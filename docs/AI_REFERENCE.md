@@ -191,22 +191,28 @@ Key modules:
 
 Release `dt-orch-api` Cythonizes most packages (`etl-back/scripts/cythonize_release.py`).
 
-**Do not put methods on Pydantic `BaseSettings` classes in Cythonized modules.** Cython turns them into `cyfunction`; Pydantic v2 treats them as unannotated fields → startup crash during Alembic.
+**Two constructs must never be Cythonized** (both caused mid-install crashes on fresh deploys):
 
-### Known failure (v1.0.0)
+- **Methods on Pydantic `BaseSettings`** → Cython turns them into `cyfunction`; Pydantic v2 treats them as unannotated fields → crash during Alembic (`cors_allow_origins`, v1.0.0).
+- **FastAPI param helpers inside `Annotated[...]`** (e.g. `Annotated[str, Depends(...)]`, `Annotated[int, Query(...)]`) → Cython reads the first `Annotated` arg as a C type and rejects the dependency at import → `TypeError: Expected str, got Depends` (`core/keycloak_auth.py`, `core/workspace_database.py`, v1.0.1). Note the plain `x: T = Depends(...)` form is fine — the `annotation_typing=False` directive handles it.
 
-```
-pydantic.errors.PydanticUserError: A non-annotated attribute was detected: `cors_allow_origins = <cyfunction ...>`
-```
+### Guardrails (as of v1.0.2 — a broken image can no longer ship)
 
-### Fix (etl-back)
+`cythonize_release.py` now:
 
-1. Move `cors_allow_origins` logic to module-level `resolve_cors_allow_origins()` in `core/config.py`
-2. Add `core/config.py` to `KEEP_PY_EXACT` in `cythonize_release.py` and `compile_release_tree.py`
-3. Merge to `master` — **Platform release** CI bumps `VERSION`, tags repos, and publishes images automatically
-4. Customer host: `./scripts/upgrade.sh full` (syncs `IMAGE_TAG` from `VERSION`, pulls, recreates)
+1. **Auto-detects** the two unsafe constructs (`_cython_unsafe_reason()`) and keeps those modules as pure Python, so `KEEP_PY_EXACT` can no longer silently drift when a new dependency module is added.
+2. **Runs an import smoke test** (`smoke_test_release()`) after the build — it imports `main` in a clean interpreter, exactly as uvicorn does. If any Cythonized module is broken, **the release build fails** instead of publishing an image that crashes on the customer's fresh install.
 
-**Always kept as `.py`:** `core/config.py`, `alembic/**`, `sandbox/runner.py`
+So the failure mode moved from "customer's fresh install crash-loops" to "the vendor's CI build fails with a clear message."
+
+### Fix workflow when a new crash appears
+
+1. Fix the source (move logic off `BaseSettings`, or the smoke test will point at the crashing module).
+2. If the auto-detector missed it, add the file to `KEEP_PY_EXACT` in `cythonize_release.py`. Prefer extending `_cython_unsafe_reason()` so the whole class is covered.
+3. Tag `etl-back vX.Y.Z` → CI builds (`SOURCE_PROTECTION=1`) and the smoke test gates the publish.
+4. Bump `etl-deployment/VERSION`; customer host: `./scripts/upgrade.sh full`.
+
+**Always kept as `.py`:** `core/config.py`, `alembic/**`, `sandbox/runner.py`. **Auto-kept (bytecode, not native):** any module matching `_cython_unsafe_reason()`.
 
 ---
 
