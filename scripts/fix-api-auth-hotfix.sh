@@ -16,26 +16,49 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-for module in keycloak_auth workspace_database; do
-  src="$HOTFIX_DIR/${module}.py"
-  if [[ ! -f "$src" ]]; then
-    echo "ERROR: missing hotfix file $src"
-    exit 1
-  fi
-  docker cp "$src" "dt-orch-api:/app/core/${module}.py"
-  docker exec dt-orch-api sh -c "rm -f /app/core/${module}.cpython-*.so"
-  echo "Patched core/${module}.py in dt-orch-api"
-done
+apply_hotfix() {
+  local container="$1"
+  for module in keycloak_auth workspace_database; do
+    src="$HOTFIX_DIR/${module}.py"
+    if [[ ! -f "$src" ]]; then
+      echo "ERROR: missing hotfix file $src"
+      exit 1
+    fi
+    docker cp "$src" "${container}:/app/core/${module}.py"
+    docker exec "$container" sh -c "rm -f /app/core/${module}.cpython-*.so"
+    echo "Patched core/${module}.py in ${container}"
+  done
+}
 
 echo "Recreating api and worker..."
 docker compose -f compose/monolith.yml --profile full --env-file "$ENV_FILE" up -d --force-recreate api worker
 
-echo "Waiting for API..."
-sleep 30
-if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
-  echo "API health OK"
-else
-  echo "WARN: API health check failed — inspect: docker logs dt-orch-api --tail 30"
+echo "Waiting for containers to start..."
+sleep 10
+
+apply_hotfix dt-orch-api
+apply_hotfix dt-orch-worker
+
+echo "Reloading API and worker to pick up hotfix..."
+docker exec dt-orch-api supervisorctl restart etl-api
+docker restart dt-orch-worker >/dev/null
+
+# shellcheck disable=SC1091
+set -a
+source "$ENV_FILE"
+set +a
+HEALTH_URL="${HEALTH_URL:-http://localhost:${API_PORT:-8000}/health}"
+
+echo "Waiting for API health at ${HEALTH_URL}..."
+for _ in $(seq 1 24); do
+  if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
+    echo "API health OK"
+    break
+  fi
+  sleep 5
+done
+if ! curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
+  echo "WARN: API health check failed — inspect: docker logs dt-orch-api --tail 50"
   exit 1
 fi
 
