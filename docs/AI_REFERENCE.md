@@ -194,7 +194,7 @@ Release `dt-orch-api` Cythonizes most packages (`etl-back/scripts/cythonize_rele
 **Two constructs must never be Cythonized** (both caused mid-install crashes on fresh deploys):
 
 - **Methods on Pydantic `BaseSettings`** → Cython turns them into `cyfunction`; Pydantic v2 treats them as unannotated fields → crash during Alembic (`cors_allow_origins`, v1.0.0).
-- **FastAPI param helpers inside `Annotated[...]`** (e.g. `Annotated[str, Depends(...)]`, `Annotated[int, Query(...)]`) → Cython reads the first `Annotated` arg as a C type and rejects the dependency at import → `TypeError: Expected str, got Depends` (`core/keycloak_auth.py`, `core/workspace_database.py`, v1.0.1). Note the plain `x: T = Depends(...)` form is fine — the `annotation_typing=False` directive handles it.
+- **FastAPI param helpers in route/dependency signatures** — both `Annotated[..., Depends(...)]` and plain `x: T = Depends(...)` break when Cythonized (`keycloak_auth` v1.0.1; entire `api/v1/*` layer on v1.0.2 first smoke-test attempt).
 
 ### Guardrails (as of v1.0.2 — a broken image can no longer ship)
 
