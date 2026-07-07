@@ -1,0 +1,19 @@
+name: Test GHCR package public
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-package-public:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set GHCR package visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/set-package-public.sh dt-orch-scraper "${{ github.repository_owner }}"
