@@ -30,29 +30,60 @@ gh_cmd() {
   return 127
 }
 
-resolve_package_api() {
-  # No leading slash: Git Bash on Windows rewrites /orgs/... to a filesystem path.
-  if gh_cmd api "orgs/${OWNER}/packages/container/${PACKAGE}" &>/dev/null; then
-    echo "orgs/${OWNER}/packages/container/${PACKAGE}"
-  elif gh_cmd api "users/${OWNER}/packages/container/${PACKAGE}" &>/dev/null; then
-    echo "users/${OWNER}/packages/container/${PACKAGE}"
-  elif gh_cmd api "user/packages/container/${PACKAGE}" &>/dev/null; then
-    echo "user/packages/container/${PACKAGE}"
-  else
-    echo "ERROR: GHCR package ${OWNER}/${PACKAGE} not found." >&2
-    echo "Tried /orgs/, /users/${OWNER}/, and /user/ package APIs." >&2
-    echo "Ensure gh is authenticated with read:packages and write:packages scopes." >&2
-    return 1
-  fi
+is_publicly_pullable() {
+  local token response code
+  response="$(curl -fsS "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${PACKAGE}:pull" 2>/dev/null || true)"
+  token="$(printf '%s' "${response}" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+  [ -n "${token}" ] || return 1
+
+  code="$(curl -fsS -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Accept: application/vnd.oci.image.index.v1+json" \
+    "https://ghcr.io/v2/${OWNER}/${PACKAGE}/manifests/latest" 2>/dev/null || echo "000")"
+  [ "${code}" = "200" ]
 }
 
-API_PATH="$(resolve_package_api)"
+resolve_package_api() {
+  local path
+  # No leading slash: Git Bash on Windows rewrites /orgs/... to a filesystem path.
+  for path in \
+    "orgs/${OWNER}/packages/container/${PACKAGE}" \
+    "users/${OWNER}/packages/container/${PACKAGE}" \
+    "user/packages/container/${PACKAGE}"; do
+    if gh_cmd api "${path}" &>/dev/null; then
+      echo "${path}"
+      return 0
+    fi
+  done
+  return 1
+}
 
-VISIBILITY="$(gh_cmd api "${API_PATH}" --jq '.visibility' 2>/dev/null || echo private)"
-if [ "${VISIBILITY}" = "public" ]; then
-  echo "GHCR package ${OWNER}/${PACKAGE} is already public."
+if is_publicly_pullable; then
+  echo "GHCR package ${OWNER}/${PACKAGE} is already public (verified via registry)."
   exit 0
 fi
 
-gh_cmd api --method PATCH "${API_PATH}" -f visibility=public
-echo "GHCR package ${OWNER}/${PACKAGE} is public."
+if API_PATH="$(resolve_package_api)"; then
+  VISIBILITY="$(gh_cmd api "${API_PATH}" --jq '.visibility' 2>/dev/null || echo private)"
+  if [ "${VISIBILITY}" = "public" ]; then
+    echo "GHCR package ${OWNER}/${PACKAGE} is already public."
+    exit 0
+  fi
+
+  if gh_cmd api --method PATCH "${API_PATH}" -f visibility=public 2>/dev/null; then
+    echo "GHCR package ${OWNER}/${PACKAGE} is public."
+    exit 0
+  fi
+
+  echo "WARN: GitHub API could not update visibility (GITHUB_TOKEN may lack write:packages)." >&2
+fi
+
+if is_publicly_pullable; then
+  echo "GHCR package ${OWNER}/${PACKAGE} is public (registry pull OK)."
+  exit 0
+fi
+
+echo "ERROR: Could not set GHCR package ${OWNER}/${PACKAGE} to public." >&2
+echo "Add repo secret PACKAGES_TOKEN (classic PAT with write:packages), or set visibility manually:" >&2
+echo "  https://github.com/users/${OWNER}/packages/container/package/${PACKAGE}" >&2
+exit 1
