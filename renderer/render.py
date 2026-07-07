@@ -129,7 +129,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"NEXT_PUBLIC_API_URL={next_public_api}",
             f"NEXT_PUBLIC_KC_URL={kc_public}",
             f"NEXT_PUBLIC_KC_REALM={realm}",
-            f"NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
+            "NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
             f"FRONTEND_URL={app_url}",
             "",
         ])
@@ -142,7 +142,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"NEXT_PUBLIC_API_URL={app_url}/api/v1",
             f"NEXT_PUBLIC_KC_URL={app_url}",
             f"NEXT_PUBLIC_KC_REALM={realm}",
-            f"NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
+            "NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
             f"FRONTEND_URL={app_url}",
             "",
         ])
@@ -164,7 +164,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"NEXT_PUBLIC_API_URL=http://{be_host}:{be_port}/api/v1",
             f"NEXT_PUBLIC_KC_URL=http://{auth_host}:{auth_port}",
             f"NEXT_PUBLIC_KC_REALM={realm}",
-            f"NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
+            "NEXT_PUBLIC_KC_CLIENT_ID=workspace-web",
             f"KC_SERVER_URL=http://{auth_host}:{auth_port}",
             f"KEYCLOAK_TOKEN_URL=http://{auth_host}:{auth_port}/realms/{realm}/protocol/openid-connect/token",
             f"PLATFORM_INFRA_URL={_platform_infra_url(config)}",

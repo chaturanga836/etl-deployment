@@ -19,11 +19,11 @@ if str(_SHARED.parent) not in sys.path:
 
 from shared.license import issue_trial_license, resolve_license_key, validate_license_key  # noqa: E402
 
-from app.host_info import detect_public_host
-from app.jobs import JobStatus, create_job, get_job
-from app.orchestrator import STATE_DIR, _resolve_env_path, _read_env_value, run_deploy_job, run_upgrade_job
-from app.prerequisites import check_prerequisites
-from app.release_manifest import compare_versions, load_install_defaults, load_platform_release
+from app.host_info import detect_public_host  # noqa: E402
+from app.jobs import JobStatus, create_job, get_job  # noqa: E402
+from app.orchestrator import STATE_DIR, _resolve_env_path, _read_env_value, run_deploy_job, run_upgrade_job  # noqa: E402
+from app.prerequisites import check_prerequisites  # noqa: E402
+from app.release_manifest import compare_versions, load_install_defaults, load_platform_release  # noqa: E402
 
 router = APIRouter(prefix="/api")
 
