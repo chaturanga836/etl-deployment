@@ -397,6 +397,22 @@ prepare_runtime_env() {
   fi
 }
 
+prefer_local_fixed_api_image() {
+  local ef="$1"
+  local tag="${LOCAL_API_IMAGE:-dt-orch-api:fixed}"
+  if ! docker image inspect "$tag" >/dev/null 2>&1; then
+    return 0
+  fi
+  API_IMAGE="$tag"
+  if grep -q '^API_IMAGE=' "$ef"; then
+    sed -i.bak "s|^API_IMAGE=.*|API_IMAGE=${tag}|" "$ef"
+  else
+    echo "API_IMAGE=${tag}" >> "$ef"
+  fi
+  rm -f "${ef}.bak"
+  echo "Using locally built API image: ${tag} (registry v1.0.1 API has a known Cython bug)"
+}
+
 show_api_failure_logs() {
   if docker ps -a --format '{{.Names}}' | grep -qx 'dt-orch-api'; then
     echo ""
@@ -583,6 +599,11 @@ cleanup_stale_host_bind_mounts
 preflight_bind_mounts
 preflight_license_key
 prepare_runtime_env "$EF"
+prefer_local_fixed_api_image "$EF"
+# shellcheck disable=SC1091
+set -a
+source "$EF"
+set +a
 
 if [[ -n "$ROLE" ]]; then
   echo "Ensuring Docker networks exist..."
