@@ -232,6 +232,9 @@ async def deploy_monolith(job: DeployJob, config: dict[str, Any]) -> str:
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_path)
     env["STATE_DIR"] = str(STATE_DIR)
+    env["ETL_DEPLOYMENT_HOST_ROOT"] = os.getenv(
+        "ETL_DEPLOYMENT_HOST_ROOT", str(DEPLOYMENT_ROOT)
+    )
 
     install_sh = SCRIPTS_DIR / "install.sh"
     install_args = ["bash", str(install_sh), "--state-dir", str(STATE_DIR)]

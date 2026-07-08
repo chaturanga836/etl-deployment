@@ -33,7 +33,11 @@ def _public_base_url(host: str, port: int, use_proxy: bool) -> str:
 def _database_url(config: dict[str, Any]) -> tuple[str, str, str, str, str]:
     db = config["database"]
     user = db["user"]
-    password = quote_plus(db["password"])
+    # Bundled installs may omit password; compose defaults POSTGRES_PASSWORD to changeme.
+    raw_password = (db.get("password") or "").strip()
+    if not raw_password and db.get("source") == "bundled":
+        raw_password = "changeme"
+    password = quote_plus(raw_password)
     # Legacy JSON key elt_db_name → metadata_db_name
     metadata_db = db.get("metadata_db_name") or db.get("elt_db_name", "dtorc_metadata")
     workspace_db = db.get("workspace_db_name", "dtorc_workspace")
@@ -50,7 +54,7 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str, str, str]:
         f"{base}/{metadata_db}",
         f"{base}/{workspace_db}",
         user,
-        db["password"],
+        raw_password,
         metadata_db,
     )
 
