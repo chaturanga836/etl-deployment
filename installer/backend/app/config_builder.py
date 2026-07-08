@@ -10,6 +10,10 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
     db = wizard.get("database", {})
     source = db.get("source", "bundled")
 
+    # Bundled installs leave password blank in the wizard; compose defaults POSTGRES_PASSWORD
+    # to changeme, so an empty value here would desync DATABASE_URL from the running DB.
+    db_password = (db.get("password") or "").strip() or "changeme"
+
     config: dict[str, Any] = {
         "version": "1",
         "mode": mode,
@@ -20,14 +24,14 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
         "database": {
             "source": source,
             "user": db.get("user", "elt"),
-            "password": db.get("password", "changeme"),
+            "password": db_password,
             "metadata_db_name": db.get("metadata_db_name", "dtorc_metadata"),
             "workspace_db_name": db.get("workspace_db_name", "dtorc_workspace"),
             "keycloak_db_name": db.get("keycloak_db_name", "keycloak"),
         },
         "keycloak": {
             "admin_user": wizard.get("kc_admin_user", "admin"),
-            "admin_password": wizard.get("kc_admin_password", db.get("password", "changeme")),
+            "admin_password": wizard.get("kc_admin_password") or db_password,
             "realm": wizard.get("kc_realm", "workspace-realm"),
             "admin_client_id": "admin-cli",
             "admin_client_secret": "",

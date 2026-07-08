@@ -420,6 +420,48 @@ docker_compose() {
   exit 1
 }
 
+reconcile_bundled_postgres_credentials() {
+  local ef="$1"
+  local changed=false
+
+  # Empty POSTGRES_PASSWORD makes compose fall back to changeme while DATABASE_URL keeps no password.
+  if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
+    POSTGRES_PASSWORD="changeme"
+    if grep -q '^POSTGRES_PASSWORD=' "$ef"; then
+      sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=changeme/' "$ef"
+      rm -f "${ef}.bak"
+    else
+      echo "POSTGRES_PASSWORD=changeme" >> "$ef"
+    fi
+    changed=true
+    echo "Set POSTGRES_PASSWORD=changeme (bundled database default)"
+  fi
+
+  # DATABASE_URL with empty password: postgresql://user:@host...
+  if [[ "${DATABASE_URL:-}" == *":@"* ]]; then
+    local user="${POSTGRES_USER:-elt}"
+    local meta_db="${DTORC_METADATA_DB_NAME:-dtorc_metadata}"
+    local ws_db="${DTORC_WORKSPACE_DB_NAME:-dtorc_workspace}"
+    DATABASE_URL="postgresql://${user}:${POSTGRES_PASSWORD}@postgres:5432/${meta_db}"
+    WORKSPACE_DATABASE_URL="postgresql://${user}:${POSTGRES_PASSWORD}@postgres:5432/${ws_db}"
+    if grep -q '^DATABASE_URL=' "$ef"; then
+      sed -i.bak "s|^DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL}|" "$ef"
+    else
+      echo "DATABASE_URL=${DATABASE_URL}" >> "$ef"
+    fi
+    if grep -q '^WORKSPACE_DATABASE_URL=' "$ef"; then
+      sed -i.bak "s|^WORKSPACE_DATABASE_URL=.*|WORKSPACE_DATABASE_URL=${WORKSPACE_DATABASE_URL}|" "$ef"
+    else
+      echo "WORKSPACE_DATABASE_URL=${WORKSPACE_DATABASE_URL}" >> "$ef"
+    fi
+    rm -f "${ef}.bak"
+    changed=true
+    echo "Fixed DATABASE_URL (was missing password)"
+  fi
+
+  [[ "$changed" == true ]]
+}
+
 generate_secrets_if_missing() {
   local ef
   ef="$(env_file_path)"
@@ -429,6 +471,10 @@ generate_secrets_if_missing() {
   set +a
 
   local updated=false
+
+  if reconcile_bundled_postgres_credentials "$ef"; then
+    updated=true
+  fi
 
   if [[ -z "${FERNET_KEY:-}" ]]; then
     FERNET_KEY="$(openssl rand -base64 32)"
