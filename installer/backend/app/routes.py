@@ -24,6 +24,7 @@ from app.jobs import JobStatus, create_job, get_job  # noqa: E402
 from app.orchestrator import STATE_DIR, _resolve_env_path, _read_env_value, run_deploy_job, run_upgrade_job  # noqa: E402
 from app.prerequisites import check_prerequisites  # noqa: E402
 from app.release_manifest import compare_versions, load_install_defaults, load_platform_release  # noqa: E402
+from app.support_report import build_support_report  # noqa: E402
 
 router = APIRouter(prefix="/api")
 
@@ -68,6 +69,12 @@ def install_defaults() -> dict[str, Any]:
 @router.get("/prerequisites")
 def prerequisites() -> dict[str, Any]:
     return check_prerequisites()
+
+
+@router.get("/support-report")
+def support_report() -> dict[str, Any]:
+    """Diagnostics bundle for end users to send when install fails."""
+    return build_support_report()
 
 
 @router.get("/install-state")

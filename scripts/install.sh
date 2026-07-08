@@ -322,11 +322,22 @@ preflight_registry_access() {
     return 0
   fi
 
-  local image="${API_IMAGE:-}"
-  [[ -z "$image" ]] && return 0
+  local missing=()
+  local image
+  for image in \
+    "${API_IMAGE:-}" \
+    "${FRONTEND_IMAGE:-}" \
+    "${INFRA_IMAGE:-}" \
+    "${SCRAPER_IMAGE:-}"; do
+    [[ -z "$image" ]] && continue
+    echo "Checking registry access for ${image}..."
+    if docker manifest inspect "$image" >/dev/null 2>&1; then
+      continue
+    fi
+    missing+=("$image")
+  done
 
-  echo "Checking registry access for ${image}..."
-  if docker manifest inspect "$image" >/dev/null 2>&1; then
+  if [[ ${#missing[@]} -eq 0 ]]; then
     return 0
   fi
 
@@ -337,25 +348,16 @@ preflight_registry_access() {
   fi
 
   cat <<EOF
-ERROR: Cannot pull ${image} (registry denied or image not found).
+ERROR: Cannot pull release image(s) (registry denied or image not found):
+
+$(printf '  - %s\n' "${missing[@]}")
 
 Default DT Orch releases use public GHCR packages — customers do not need the vendor GitHub token.
+Verify all images exist for the tag in VERSION:
+  ./scripts/release/verify-release-images.sh
+
 If pulls are denied, the vendor must run:
   ./scripts/release/set-packages-public.sh
-
-If you use a private registry instead, authenticate with your own credentials (after the vendor
-grants package access):
-  echo "<YOUR_PAT>" | docker login ghcr.io -u <your-github-username> --password-stdin
-
-Or set in .env (optional):
-  REGISTRY_USER=<github-username>
-  REGISTRY_TOKEN=<github-pat-with-read:packages>
-
-To build from local sibling repos instead of pulling:
-  ./scripts/install.sh --dev --state-dir <state-dir> full
-
-For the setup wizard with local repos, run ./scripts/setup-ui.sh from a tree that includes
-etl-back, elt-frontend, and platform-infra-repo next to etl-deployment.
 EOF
   exit 1
 }
@@ -410,7 +412,7 @@ prefer_local_fixed_api_image() {
     echo "API_IMAGE=${tag}" >> "$ef"
   fi
   rm -f "${ef}.bak"
-  echo "Using locally built API image: ${tag} (registry v1.0.1 API has a known Cython bug)"
+  echo "Using locally built API image: ${tag}"
 }
 
 show_api_failure_logs() {

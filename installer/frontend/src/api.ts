@@ -8,6 +8,7 @@ export type Prerequisites = {
   registry?: {
     url: string;
     api_image: string;
+    images?: Record<string, { image: string; accessible: boolean; error: string | null }>;
     accessible: boolean | null;
     public: boolean;
     error: string | null;
@@ -236,6 +237,11 @@ export async function startUpgrade(): Promise<string> {
   }
   const data = await r.json();
   return data.job_id as string;
+}
+
+export async function fetchSupportReport(): Promise<Record<string, unknown>> {
+  const r = await fetch(`${API}/support-report`);
+  return r.json();
 }
 
 export async function fetchInstallState() {

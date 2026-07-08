@@ -18,6 +18,7 @@ from app.config_builder import build_deployment_config
 from app.deploy_phases import phase_from_log_line
 from app.jobs import DeployJob, JobStatus
 from app.release_manifest import compare_versions, load_platform_release
+from app.support_report import clear_install_failure, write_install_failure
 
 DEPLOYMENT_ROOT = Path(os.getenv("ETL_DEPLOYMENT_ROOT", "/opt/etl-deployment"))
 STATE_DIR = Path(os.getenv("INSTALLER_STATE_DIR", "/opt/etl-deployment-state"))
@@ -411,9 +412,11 @@ async def run_deploy_job(job: DeployJob, wizard: dict[str, Any]) -> None:
         }
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         (STATE_DIR / "install-state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+        clear_install_failure()
         job.push_phase("complete")
         job.complete(login_url)
     except Exception as exc:
+        write_install_failure(job.id, str(exc), job.log_lines)
         job.fail(str(exc))
         job.push_log(f"ERROR: {exc}")
 
@@ -462,5 +465,6 @@ async def run_upgrade_job(job: DeployJob) -> None:
         job.push_phase("upgrade_complete")
         job.complete(login_url)
     except Exception as exc:
+        write_install_failure(job.id, str(exc), job.log_lines)
         job.fail(str(exc))
         job.push_log(f"ERROR: {exc}")

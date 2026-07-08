@@ -10,20 +10,24 @@ ETL_BACK="${ETL_BACK:-$ROOT_DIR/../etl-back}"
 ETL_BACK_REPO="${ETL_BACK_REPO:-git@github.com:chaturanga836/etl-back.git}"
 ETL_BACK_REPO_HTTPS="${ETL_BACK_REPO_HTTPS:-https://github.com/chaturanga836/etl-back.git}"
 API_TAG="${LOCAL_API_IMAGE:-dt-orch-api:fixed}"
+# End-user installs pull public GHCR images only. Vendor devs may pass --vendor-build-api.
 ASSUME_YES=false
-SKIP_API_BUILD=false
+SKIP_API_BUILD=true
+VENDOR_BUILD_API=false
 
 usage() {
   cat <<'EOF'
 Usage: reinstall.sh [OPTIONS]
 
 Tear down the DT Orch platform and setup wizard, remove persisted volumes/state,
-build a fixed API image from etl-back (avoids broken GHCR v1.0.1), then start
-the setup wizard (./scripts/setup-ui.sh).
+then start the setup wizard (./scripts/setup-ui.sh).
+
+End users only need etl-deployment + public GHCR images (see VERSION).
 
 Options:
-  --yes, -y           Skip confirmation prompt
-  --skip-api-build    Do not clone/build etl-back (use registry image as-is)
+  --yes, -y             Skip confirmation prompt
+  --vendor-build-api    Vendor only: clone/build etl-back as dt-orch-api:fixed
+  --skip-api-build      Default — use registry images from VERSION
   -h, --help          Show this help
 
 Environment:
@@ -43,6 +47,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --yes|-y) ASSUME_YES=true; shift ;;
+    --vendor-build-api) VENDOR_BUILD_API=true; SKIP_API_BUILD=false; shift ;;
     --skip-api-build) SKIP_API_BUILD=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1"; usage; exit 1 ;;
@@ -95,7 +100,7 @@ This will:
   - Stop and remove all DT Orch platform containers (profile: full)
   - Delete Postgres and other platform volumes (all application data)
   - Stop the setup wizard and clear installer state
-  - Clone etl-back (if missing) and build ${API_TAG}
+  - Clone etl-back and build ${API_TAG} (only with --vendor-build-api)
   - Restart the setup wizard
 
 Continue? [y/N]
@@ -130,7 +135,7 @@ for vol in etl-deployment_installer_state compose_installer_state installer_stat
   docker volume rm "$vol" 2>/dev/null || true
 done
 
-if [[ "$SKIP_API_BUILD" != true ]]; then
+if [[ "$SKIP_API_BUILD" != true ]] || [[ "$VENDOR_BUILD_API" == true ]]; then
   if docker image inspect "$API_TAG" >/dev/null 2>&1; then
     echo "Using existing image: ${API_TAG}"
   elif clone_etl_back; then

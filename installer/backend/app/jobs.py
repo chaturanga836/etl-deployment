@@ -67,3 +67,7 @@ def create_job() -> DeployJob:
 
 def get_job(job_id: str) -> DeployJob | None:
     return _jobs.get(job_id)
+
+
+def list_jobs() -> list[DeployJob]:
+    return list(_jobs.values())

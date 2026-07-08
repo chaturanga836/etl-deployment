@@ -58,13 +58,23 @@ def check_prerequisites() -> dict[str, Any]:
     registry_url = defaults["registry_url"]
     registry_public = defaults.get("registry_public", True)
     image_tag = defaults["image_tag"]
-    api_image = f"{registry_url}/dt-orch-api:{image_tag}"
+    registry_url = defaults["registry_url"].rstrip("/")
+    image_names = ("dt-orch-api", "dt-orch-frontend", "baas-infra", "dt-orch-scraper")
+    images = {name: f"{registry_url}/{name}:{image_tag}" for name in image_names}
     local_build = Path("/opt/etl-back/Dockerfile").is_file()
 
+    registry_images: dict[str, dict[str, Any]] = {}
     registry_ok: bool | None = None
     registry_error: str | None = None
     if docker is not None and not local_build:
-        registry_ok, registry_error = _registry_probe(api_image)
+        for name, ref in images.items():
+            ok, err = _registry_probe(ref)
+            registry_images[name] = {"image": ref, "accessible": ok, "error": err}
+            if not ok:
+                registry_ok = False
+                registry_error = registry_error or err or "not_found"
+        if registry_ok is None:
+            registry_ok = True
 
     return {
         "docker": {"available": docker is not None, "version": docker},
@@ -74,7 +84,8 @@ def check_prerequisites() -> dict[str, Any]:
         "docker_socket": shutil.which("docker") is not None,
         "registry": {
             "url": registry_url,
-            "api_image": api_image,
+            "api_image": images["dt-orch-api"],
+            "images": registry_images,
             "accessible": registry_ok,
             "public": registry_public,
             "error": registry_error,

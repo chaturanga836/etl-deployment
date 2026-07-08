@@ -23,6 +23,7 @@ import {
   fetchInstallDefaults,
   fetchInstallState,
   fetchPrerequisites,
+  fetchSupportReport,
   fetchUpgradeInfo,
   requestTrialLicense,
   startDeploy,
@@ -127,6 +128,17 @@ export default function App() {
   const onError = useCallback((msg: string) => {
     setDeployError(msg);
     message.error(msg);
+  }, []);
+
+  const copySupportReport = useCallback(async () => {
+    try {
+      const report = await fetchSupportReport();
+      const text = JSON.stringify(report, null, 2);
+      await navigator.clipboard.writeText(text);
+      message.success('Support report copied — send it to your vendor');
+    } catch {
+      message.error('Could not copy support report');
+    }
   }, []);
 
   const { logs, phase, bottomRef } = useDeployEvents(jobId, onComplete, onError);
@@ -321,10 +333,23 @@ export default function App() {
                       </>
                     )}
                     {prereqs.registry.public && prereqs.registry.error === 'not_found' && (
-                      <Text>
-                        Image <Text code>{prereqs.registry.api_image}</Text> was not found. The vendor may
-                        not have published this version yet.
-                      </Text>
+                      <Space direction="vertical" size="small">
+                        <Text>
+                          One or more release images were not found. The vendor may not have published
+                          this version yet.
+                        </Text>
+                        {prereqs.registry.images && (
+                          <ul style={{ margin: 0, paddingLeft: 20 }}>
+                            {Object.entries(prereqs.registry.images).map(([name, info]) => (
+                              <li key={name}>
+                                <Text code>{info.image}</Text>
+                                {' — '}
+                                {info.accessible ? 'OK' : info.error ?? 'missing'}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Space>
                     )}
                     {prereqs.registry.public && prereqs.registry.error === 'unreachable' && (
                       <Text>
@@ -758,7 +783,15 @@ export default function App() {
                 />
               </div>
             )}
-            {deployError && <Alert message={deployError} type="error" style={{ marginBottom: 12 }} />}
+            {deployError && (
+              <Space direction="vertical" style={{ width: '100%', marginBottom: 12 }}>
+                <Alert message={deployError} type="error" />
+                <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  Copy the support report below and send it to your vendor so they can diagnose the failure.
+                </Paragraph>
+                <Button onClick={copySupportReport}>Copy support report</Button>
+              </Space>
+            )}
             <div className="installer-log-viewer">
               {logs.map((line, i) => (
                 <div key={i}>{line}</div>
