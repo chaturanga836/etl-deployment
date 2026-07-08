@@ -18,18 +18,24 @@ import {
   message,
 } from 'antd';
 import {
+  ACTIVE_JOB_STORAGE_KEY,
+  clearActiveJob,
   defaultWizard,
+  fetchActiveDeployJob,
+  fetchDeployStatus,
   fetchHostInfo,
   fetchInstallDefaults,
   fetchInstallState,
   fetchPrerequisites,
   fetchSupportReport,
   fetchUpgradeInfo,
+  persistActiveJob,
   requestTrialLicense,
   startDeploy,
   startUpgrade,
   validateDatabase,
   validateLicense,
+  type DeployJobSnapshot,
   type HostInfo,
   type InstallDefaults,
   type Prerequisites,
@@ -121,6 +127,7 @@ export default function App() {
   }, []);
 
   const onComplete = useCallback((url: string) => {
+    clearActiveJob();
     setLoginUrl(url);
     setStep(9);
     fetchUpgradeInfo().then(setUpgradeInfo).catch(() => {});
@@ -143,51 +150,89 @@ export default function App() {
 
   const { logs, phase, bottomRef } = useDeployEvents(jobId, onComplete, onError);
 
-  useEffect(() => {
-    fetchPrerequisites().then(setPrereqs).catch(() => {});
-    fetchInstallDefaults().then((defaults) => {
-      setInstallDefaults(defaults);
-      setWizard((w) => ({
-        ...w,
-        registry_url: defaults.registry_url,
-        image_tag: defaults.image_tag,
-        app_name: defaults.app_name,
-      }));
-    }).catch(() => {});
-    fetchHostInfo().then((info) => {
-      setHostInfo(info);
-      setWizard((w) => ({
-        ...w,
-        monolith: {
-          ...w.monolith,
-          public_host: w.monolith.public_host === 'localhost'
-            ? info.suggested_public_host
-            : w.monolith.public_host,
-        },
-        kubernetes: {
-          ...w.kubernetes,
-          ingress_host: w.kubernetes.ingress_host === 'studio.example.com'
-            ? info.suggested_public_host
-            : w.kubernetes.ingress_host,
-        },
-      }));
-    }).catch(() => {});
-    fetchInstallState().then((s) => {
-      if (s.installed) {
-        setAlreadyInstalled(s);
-        setLoginUrl(s.login_url || '');
-        setStep(9);
-      }
-    });
-    fetchUpgradeInfo().then((info) => {
-      setUpgradeInfo(info);
-      if (info.installed && info.login_url) {
-        setLoginUrl(info.login_url);
-        setAlreadyInstalled((prev) => prev ?? { login_url: info.login_url ?? undefined });
-        setStep(9);
-      }
-    }).catch(() => {});
+  const resumeDeployJob = useCallback((snapshot: DeployJobSnapshot) => {
+    setJobId(snapshot.job_id);
+    setJobKind(snapshot.kind === 'upgrade' ? 'upgrade' : 'deploy');
+    setStep(8);
+    setDeployError(snapshot.status === 'failed' ? snapshot.error || 'Installation failed' : '');
+    persistActiveJob(snapshot.job_id, snapshot.kind);
   }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      fetchPrerequisites().then(setPrereqs).catch(() => {});
+      fetchInstallDefaults().then((defaults) => {
+        setInstallDefaults(defaults);
+        setWizard((w) => ({
+          ...w,
+          registry_url: defaults.registry_url,
+          image_tag: defaults.image_tag,
+          app_name: defaults.app_name,
+        }));
+      }).catch(() => {});
+      fetchHostInfo().then((info) => {
+        setHostInfo(info);
+        setWizard((w) => ({
+          ...w,
+          monolith: {
+            ...w.monolith,
+            public_host: w.monolith.public_host === 'localhost'
+              ? info.suggested_public_host
+              : w.monolith.public_host,
+          },
+          kubernetes: {
+            ...w.kubernetes,
+            ingress_host: w.kubernetes.ingress_host === 'studio.example.com'
+              ? info.suggested_public_host
+              : w.kubernetes.ingress_host,
+          },
+        }));
+      }).catch(() => {});
+
+      const installState = await fetchInstallState().catch(() => ({ installed: false }));
+      if (installState.installed) {
+        setAlreadyInstalled(installState);
+        setLoginUrl(installState.login_url || '');
+        setStep(9);
+        return;
+      }
+
+      const upgradeInfoResult = await fetchUpgradeInfo().catch(() => null);
+      if (upgradeInfoResult) {
+        setUpgradeInfo(upgradeInfoResult);
+        if (upgradeInfoResult.installed && upgradeInfoResult.login_url) {
+          setLoginUrl(upgradeInfoResult.login_url);
+          setAlreadyInstalled((prev) => prev ?? { login_url: upgradeInfoResult.login_url ?? undefined });
+          setStep(9);
+          return;
+        }
+      }
+
+      const active = await fetchActiveDeployJob();
+      if (active) {
+        resumeDeployJob(active);
+        return;
+      }
+
+      const storedJobId = sessionStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
+      if (!storedJobId) {
+        return;
+      }
+
+      try {
+        const status = await fetchDeployStatus(storedJobId);
+        if (status.status === 'pending' || status.status === 'running' || status.status === 'failed') {
+          resumeDeployJob(status);
+        } else {
+          clearActiveJob();
+        }
+      } catch {
+        clearActiveJob();
+      }
+    };
+
+    void load();
+  }, [resumeDeployJob]);
 
   const update = (patch: Partial<WizardState>) => setWizard((w) => ({ ...w, ...patch }));
 
@@ -243,6 +288,7 @@ export default function App() {
     setJobKind('deploy');
     try {
       const id = await startDeploy(wizard);
+      persistActiveJob(id, 'deploy');
       setJobId(id);
       setStep(8);
     } catch (e) {
@@ -255,6 +301,7 @@ export default function App() {
     setJobKind('upgrade');
     try {
       const id = await startUpgrade();
+      persistActiveJob(id, 'upgrade');
       setJobId(id);
       setStep(8);
     } catch (e) {

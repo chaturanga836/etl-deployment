@@ -1,5 +1,8 @@
 const API = '/api';
 
+export const ACTIVE_JOB_STORAGE_KEY = 'dt-orch-installer-job-id';
+export const ACTIVE_JOB_KIND_STORAGE_KEY = 'dt-orch-installer-job-kind';
+
 export type Prerequisites = {
   docker: { available: boolean; version: string | null };
   compose: { available: boolean; version: string | null };
@@ -247,4 +250,48 @@ export async function fetchSupportReport(): Promise<Record<string, unknown>> {
 export async function fetchInstallState() {
   const r = await fetch(`${API}/install-state`);
   return r.json();
+}
+
+export type DeployPhase = {
+  key: string;
+  label: string;
+  progress: number;
+};
+
+export type DeployJobSnapshot = {
+  active?: boolean;
+  job_id: string;
+  kind: 'deploy' | 'upgrade';
+  status: 'pending' | 'running' | 'succeeded' | 'failed';
+  login_url: string | null;
+  error: string | null;
+  phase: DeployPhase | null;
+  logs: string[];
+};
+
+export async function fetchActiveDeployJob(): Promise<DeployJobSnapshot | null> {
+  const r = await fetch(`${API}/deploy/active`);
+  const data = await r.json();
+  if (!data.active) {
+    return null;
+  }
+  return data as DeployJobSnapshot;
+}
+
+export async function fetchDeployStatus(jobId: string): Promise<DeployJobSnapshot> {
+  const r = await fetch(`${API}/deploy/${jobId}/status`);
+  if (!r.ok) {
+    throw new Error('Job not found');
+  }
+  return r.json();
+}
+
+export function persistActiveJob(jobId: string, kind: 'deploy' | 'upgrade') {
+  sessionStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId);
+  sessionStorage.setItem(ACTIVE_JOB_KIND_STORAGE_KEY, kind);
+}
+
+export function clearActiveJob() {
+  sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+  sessionStorage.removeItem(ACTIVE_JOB_KIND_STORAGE_KEY);
 }

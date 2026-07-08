@@ -20,9 +20,11 @@ class JobStatus(str, Enum):
 @dataclass
 class DeployJob:
     id: str
+    kind: str = "deploy"
     status: JobStatus = JobStatus.PENDING
     login_url: str | None = None
     error: str | None = None
+    current_phase: dict[str, Any] | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     events: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     log_lines: list[str] = field(default_factory=list)
@@ -42,6 +44,7 @@ class DeployJob:
         from app.deploy_phases import phase_payload
 
         payload = phase_payload(phase, label=label, progress=progress)
+        self.current_phase = payload
         self.events.put_nowait({"event": "phase", "data": payload})
 
     def complete(self, login_url: str) -> None:
@@ -58,9 +61,9 @@ class DeployJob:
 _jobs: dict[str, DeployJob] = {}
 
 
-def create_job() -> DeployJob:
+def create_job(*, kind: str = "deploy") -> DeployJob:
     job_id = str(uuid.uuid4())
-    job = DeployJob(id=job_id)
+    job = DeployJob(id=job_id, kind=kind)
     _jobs[job_id] = job
     return job
 
@@ -71,3 +74,27 @@ def get_job(job_id: str) -> DeployJob | None:
 
 def list_jobs() -> list[DeployJob]:
     return list(_jobs.values())
+
+
+def get_active_job() -> DeployJob | None:
+    """Return the most recent job that the wizard should resume."""
+    candidates = [
+        job
+        for job in list_jobs()
+        if job.status in (JobStatus.PENDING, JobStatus.RUNNING, JobStatus.FAILED)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda job: job.created_at)
+
+
+def job_snapshot(job: DeployJob) -> dict[str, Any]:
+    return {
+        "job_id": job.id,
+        "kind": job.kind,
+        "status": job.status.value,
+        "login_url": job.login_url,
+        "error": job.error,
+        "phase": job.current_phase,
+        "logs": job.log_lines,
+    }

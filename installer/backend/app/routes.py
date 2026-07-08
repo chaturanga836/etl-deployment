@@ -20,7 +20,7 @@ if str(_SHARED.parent) not in sys.path:
 from shared.license import issue_trial_license, resolve_license_key, validate_license_key  # noqa: E402
 
 from app.host_info import detect_public_host  # noqa: E402
-from app.jobs import JobStatus, create_job, get_job  # noqa: E402
+from app.jobs import JobStatus, create_job, get_active_job, get_job, job_snapshot  # noqa: E402
 from app.orchestrator import run_deploy_job, run_upgrade_job  # noqa: E402
 from app.prerequisites import check_prerequisites  # noqa: E402
 from app.release_manifest import compare_versions, load_install_defaults, load_platform_release  # noqa: E402
@@ -127,7 +127,7 @@ async def start_upgrade() -> dict[str, str]:
             detail=f"Already on {info.get('current_tag')}; no newer release available.",
         )
 
-    job = create_job()
+    job = create_job(kind="upgrade")
     asyncio.create_task(run_upgrade_job(job))
     return {"job_id": job.id}
 
@@ -214,17 +214,20 @@ async def start_deploy(body: DeployRequest) -> dict[str, str]:
     return {"job_id": job.id}
 
 
+@router.get("/deploy/active")
+def active_deploy() -> dict[str, Any]:
+    job = get_active_job()
+    if not job:
+        return {"active": False}
+    return {"active": True, **job_snapshot(job)}
+
+
 @router.get("/deploy/{job_id}/status")
 def deploy_status(job_id: str) -> dict[str, Any]:
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {
-        "job_id": job.id,
-        "status": job.status.value,
-        "login_url": job.login_url,
-        "error": job.error,
-    }
+    return job_snapshot(job)
 
 
 @router.get("/deploy/{job_id}/events")
@@ -234,6 +237,26 @@ async def deploy_events(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     async def event_generator():
+        for line in job.log_lines:
+            yield {"event": "log", "data": line}
+        if job.current_phase:
+            yield {
+                "event": "phase",
+                "data": json.dumps(job.current_phase),
+            }
+        if job.status == JobStatus.SUCCEEDED:
+            yield {
+                "event": "complete",
+                "data": json.dumps({"login_url": job.login_url}),
+            }
+            return
+        if job.status == JobStatus.FAILED:
+            yield {"event": "error", "data": job.error or "Installation failed"}
+            return
+
+        while not job.events.empty():
+            job.events.get_nowait()
+
         while True:
             if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED) and job.events.empty():
                 break
