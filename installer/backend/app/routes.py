@@ -81,16 +81,17 @@ def install_state() -> dict[str, Any]:
 
 @router.get("/upgrade-info")
 def upgrade_info() -> dict[str, Any]:
+    state_path = STATE_DIR / "install-state.json"
+    if not state_path.is_file():
+        return {"installed": False, "upgrade_available": False}
+
     env_path = _resolve_env_path()
     if env_path is None:
         return {"installed": False, "upgrade_available": False}
 
     platform_version, available_tag = load_platform_release()
     current_tag = _read_env_value(env_path, "IMAGE_TAG") or "v1.0.0"
-    login_url = None
-    state_path = STATE_DIR / "install-state.json"
-    if state_path.is_file():
-        login_url = json.loads(state_path.read_text(encoding="utf-8")).get("login_url")
+    login_url = json.loads(state_path.read_text(encoding="utf-8")).get("login_url")
 
     if not login_url:
         app_url = _read_env_value(env_path, "APP_URL")
