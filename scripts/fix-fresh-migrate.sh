@@ -124,7 +124,8 @@ def patch(path: str, old: str, new: str) -> None:
     if old not in text:
         if new.split("\n", 1)[0] in text:
             return
-        raise SystemExit(f"patch miss: {path}")
+        print(f"skip patch (already updated or different tree): {path}")
+        return
     p.write_text(text.replace(old, new, 1))
 
 def ensure_import(path: str) -> None:

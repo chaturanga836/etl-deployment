@@ -66,12 +66,15 @@ services:
     container_name: dt-orch-api
     restart: unless-stopped
     profiles: [full, backend]
+    entrypoint: ["/bin/sh", "/opt/migrate-fix/api-entrypoint-fresh-install.sh"]
     env_file: ${ENV_FILE:-../.env}
     environment:
       <<: *api-env
     volumes:
       - backend_logs:/app/logs
       - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/config/license-public.pem:/etc/dt-orch/license-public.pem:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/scripts/fix-fresh-migrate.sh:/opt/migrate-fix/fix-fresh-migrate.sh:ro
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/scripts/api-entrypoint-fresh-install.sh:/opt/migrate-fix/api-entrypoint-fresh-install.sh:ro
     depends_on:
       postgres:
         condition: service_healthy

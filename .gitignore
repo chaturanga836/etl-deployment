@@ -1,5 +1,9 @@
 config/license-private.pem
 
+# Python bytecode
+**/__pycache__/
+*.pyc
+
 # Installer frontend (install deps in Docker / locally with npm ci)
 installer/frontend/node_modules/
 installer/frontend/dist/
