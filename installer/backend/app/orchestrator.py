@@ -18,38 +18,16 @@ from app.config_builder import build_deployment_config
 from app.deploy_phases import phase_from_log_line
 from app.jobs import DeployJob, JobStatus
 from app.release_manifest import compare_versions, load_platform_release
+from app.state import DEPLOYMENT_ROOT, STATE_DIR, read_env_value, resolve_env_path
 from app.support_report import clear_install_failure, write_install_failure
-
-DEPLOYMENT_ROOT = Path(os.getenv("ETL_DEPLOYMENT_ROOT", "/opt/etl-deployment"))
-STATE_DIR = Path(os.getenv("INSTALLER_STATE_DIR", "/opt/etl-deployment-state"))
 SCRIPTS_DIR = DEPLOYMENT_ROOT / "scripts"
-
-
-def _resolve_env_path() -> Path | None:
-    """Match upgrade.sh / install.sh env file resolution."""
-    if STATE_DIR.is_dir() and (STATE_DIR / ".env").is_file():
-        return STATE_DIR / ".env"
-    root_env = DEPLOYMENT_ROOT / ".env"
-    if root_env.is_file():
-        return root_env
-    return None
-
-
-def _read_env_value(env_path: Path, key: str) -> str | None:
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith("#") or "=" not in line:
-            continue
-        name, _, value = line.partition("=")
-        if name.strip() == key:
-            return value.strip()
-    return None
 
 
 def _upgrade_runtime_env() -> dict[str, str]:
     env = os.environ.copy()
     env["STATE_DIR"] = str(STATE_DIR)
     env["ETL_DEPLOYMENT_HOST_ROOT"] = os.getenv("ETL_DEPLOYMENT_HOST_ROOT", str(DEPLOYMENT_ROOT))
-    env_path = _resolve_env_path()
+    env_path = resolve_env_path()
     if env_path is not None:
         env["ENV_FILE"] = str(env_path)
     return env
@@ -425,11 +403,11 @@ async def run_upgrade_job(job: DeployJob) -> None:
     job.status = JobStatus.RUNNING
     job.push_phase("upgrade_starting")
     try:
-        env_path = _resolve_env_path()
+        env_path = resolve_env_path()
         if env_path is None:
             raise RuntimeError("No installation found (.env missing). Run install first.")
 
-        current_tag = _read_env_value(env_path, "IMAGE_TAG") or "v1.0.0"
+        current_tag = read_env_value(env_path, "IMAGE_TAG") or "v1.0.0"
         _, available_tag = load_platform_release()
         if compare_versions(current_tag, available_tag) >= 0:
             raise RuntimeError(f"Already on {current_tag}; no newer release in VERSION.")
@@ -446,7 +424,7 @@ async def run_upgrade_job(job: DeployJob) -> None:
             raise RuntimeError(f"upgrade.sh exited with code {code}")
 
         login_url = _login_url_from_env(env_path)
-        new_tag = _read_env_value(env_path, "IMAGE_TAG") or available_tag
+        new_tag = read_env_value(env_path, "IMAGE_TAG") or available_tag
 
         state_path = STATE_DIR / "install-state.json"
         state: dict[str, Any] = {}

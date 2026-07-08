@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from app.jobs import JobStatus, list_jobs
-from app.orchestrator import STATE_DIR, _resolve_env_path
 from app.prerequisites import check_prerequisites
 from app.release_manifest import load_install_defaults, load_platform_release
+from app.state import STATE_DIR, resolve_env_path
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -84,7 +84,7 @@ def build_support_report() -> dict[str, Any]:
         if job.status == JobStatus.FAILED
     ]
 
-    env_path = _resolve_env_path()
+    env_path = resolve_env_path()
     env_snapshot: dict[str, str] = {}
     if env_path and env_path.is_file():
         for line in env_path.read_text(encoding="utf-8").splitlines():
