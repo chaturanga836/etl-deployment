@@ -204,6 +204,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"KEYCLOAK_PORT={keycloak_port}",
             f"KC_ADMIN_USER={kc['admin_user']}",
             _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
+            f"KC_BOOTSTRAP_URL=http://localhost:{keycloak_port}",
             "KC_SERVER_URL=http://keycloak:8080",
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",

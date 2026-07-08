@@ -7,14 +7,11 @@ import argparse
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 import httpx
 
-
-def _kc_base() -> str:
-    return os.getenv("KC_SERVER_URL", "http://keycloak:8080").rstrip("/")
+from kc_bootstrap_common import kc_base, master_token
 
 
 def _realm() -> str:
@@ -25,30 +22,6 @@ def _realm() -> str:
     )
 
 
-def _master_token() -> str:
-    admin_user = os.getenv("KC_ADMIN_USER", os.getenv("KEYCLOAK_ADMIN", "admin"))
-    admin_pass = os.getenv("KC_ADMIN_PASSWORD", os.getenv("KEYCLOAK_ADMIN_PASSWORD", "changeme"))
-    url = f"{_kc_base()}/realms/master/protocol/openid-connect/token"
-    with httpx.Client(timeout=30.0, verify=False) as client:
-        for _ in range(30):
-            try:
-                resp = client.post(
-                    url,
-                    data={
-                        "grant_type": "password",
-                        "client_id": "admin-cli",
-                        "username": admin_user,
-                        "password": admin_pass,
-                    },
-                )
-                if resp.status_code == 200:
-                    return resp.json()["access_token"]
-            except httpx.HTTPError:
-                pass
-            time.sleep(2)
-    raise RuntimeError("Could not obtain Keycloak master admin token")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", required=True)
@@ -57,9 +30,9 @@ def main() -> int:
     args = parser.parse_args()
 
     realm = _realm()
-    token = _master_token()
+    token = master_token()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base = f"{_kc_base()}/admin/realms/{realm}"
+    base = f"{kc_base()}/admin/realms/{realm}"
 
     with httpx.Client(timeout=60.0, verify=False) as client:
         lookup = client.get(
