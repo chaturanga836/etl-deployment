@@ -71,7 +71,7 @@ Skips super-admin bootstrap UI flow; uses defaults from `VERSION` / `.env`. Good
 | `dt-orch-frontend` | dt-orch-frontend | Bound to `127.0.0.1:3001` |
 | `baas-infra-service` | baas-infra | Port 9000 |
 | `dt-orch-scraper` | dt-orch-scraper | Port 8088 |
-| `elt-keycloak` | keycloak:26.0.0 | Port 8081 |
+| `elt-keycloak` | keycloak:26.0.0 | Loopback `:8081` only; browser uses nginx `/realms/` on `:80` |
 | `elt-proxy` | nginx:1.27-alpine | Port 80; depends on healthy API |
 
 Compose: `compose/monolith.yml` (profile `full`).
@@ -328,6 +328,14 @@ Alternative cleanup only (no wizard restart):
 **Fix in code:** `compose/installer.yml` adds `host.docker.internal:host-gateway`; `install.sh` and `kc_bootstrap_common.py` use `http://host.docker.internal:${KEYCLOAK_PORT}` when `/.dockerenv` + Docker socket are present.
 
 **Agent rule:** do **not** tell users to `pip install httpx` or run bootstrap scripts on the host. Recreate the installer (`./scripts/setup-ui.sh` or `reinstall.sh`) so `extra_hosts` applies, then redo Install in the UI.
+
+### Keycloak admin shows "HTTPS required" on `http://<public-ip>:8081`
+
+**Root cause:** Keycloak rejects plain HTTP from **public** (non-private) IPs when hit directly on port 8081.
+
+**Fix in code:** nginx proxies `/realms/`, `/resources/`, `/admin/` on port 80; `NEXT_PUBLIC_KC_URL` = `APP_URL`; Keycloak published on `127.0.0.1:8081` only; bootstrap sets `master` realm `sslRequired=none`.
+
+**Use:** `http://<host>/admin/` (port 80), not `:8081` on a public IP.
 
 ### git pull blocked on server
 

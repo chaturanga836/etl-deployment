@@ -197,8 +197,11 @@ services:
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      KC_PROXY: edge
+      KC_PROXY_HEADERS: xforwarded
     ports:
-      - "${KEYCLOAK_PORT:-8081}:8080"
+      # Loopback only — nginx (:80) is the public Keycloak entry (avoids HTTPS-required on public :8081).
+      - "127.0.0.1:${KEYCLOAK_PORT:-8081}:8080"
     depends_on:
       postgres:
         condition: service_healthy

@@ -121,9 +121,10 @@ def render_env(config: dict[str, Any]) -> str:
         app_url = _public_base_url(host, http_port, use_proxy)
         if use_proxy:
             next_public_api = f"{app_url}/api/v1"
+            kc_public = app_url
         else:
             next_public_api = f"http://{host}:{api_port}/api/v1"
-        kc_public = f"http://{host}:{keycloak_port}"
+            kc_public = f"http://{host}:{keycloak_port}"
 
         lines.extend([
             f"APP_URL={app_url}",
@@ -199,13 +200,19 @@ def render_env(config: dict[str, Any]) -> str:
     if mode == "monolith":
         keycloak_port = config["monolith"].get("ports", {}).get("keycloak", 8081)
         host = config["monolith"].get("public_host", "localhost")
-        kc_public = f"http://{host}:{keycloak_port}"
+        use_proxy = config["monolith"].get("use_proxy", True)
+        http_port = config["monolith"].get("ports", {}).get("http", 80)
+        app_url = _public_base_url(host, http_port, use_proxy)
+        kc_public = app_url if use_proxy else f"http://{host}:{keycloak_port}"
         lines.extend([
             f"KEYCLOAK_PORT={keycloak_port}",
             f"KC_ADMIN_USER={kc['admin_user']}",
             _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
             f"KC_BOOTSTRAP_URL=http://localhost:{keycloak_port}",
             "KC_SERVER_URL=http://keycloak:8080",
+            f"KC_PUBLIC_URL={kc_public}",
+            f"KC_ISSUER={kc_public}/realms/{realm}",
+            f"KC_JWKS_URL={kc_public}/realms/{realm}/protocol/openid-connect/certs",
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
             f"KEYCLOAK_TOKEN_URL=http://keycloak:8080/realms/{realm}/protocol/openid-connect/token",
@@ -213,7 +220,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', '')}",
             f"PLATFORM_INFRA_URL={_platform_infra_url(config)}",
             "",
-            f"# Public Keycloak URL (browser): {kc_public}",
+            f"# Public Keycloak URL (browser, via nginx when use_proxy): {kc_public}",
         ])
     else:
         lines.extend([

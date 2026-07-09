@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from kc_bootstrap_common import kc_base, master_token
+from kc_bootstrap_common import configure_realms_for_http, kc_base, master_token
 
 ROOT = Path(__file__).resolve().parents[1]
 REALM_FILE = ROOT / "keycloak" / "realm-workspace.json"
@@ -22,6 +22,8 @@ def main() -> int:
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     with httpx.Client(timeout=60.0, verify=False) as client:
+        configure_realms_for_http(client, headers, "master")
+
         check = client.get(f"{kc_base()}/admin/realms/{realm_name}", headers=headers)
         if check.status_code == 200:
             print(f"Realm {realm_name} already exists")

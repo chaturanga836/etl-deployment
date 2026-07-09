@@ -53,6 +53,19 @@ def wait_for_keycloak(*, attempts: int = 90, sleep_seconds: float = 2.0) -> None
     )
 
 
+def configure_realms_for_http(client: httpx.Client, headers: dict[str, str], *realm_names: str) -> None:
+    """Allow plain HTTP for self-host installs (Keycloak requires HTTPS on public IPs by default)."""
+    for realm_name in realm_names:
+        resp = client.get(f"{kc_base()}/admin/realms/{realm_name}", headers=headers)
+        if resp.status_code != 200:
+            continue
+        realm = resp.json()
+        if realm.get("sslRequired") == "none":
+            continue
+        realm["sslRequired"] = "none"
+        client.put(f"{kc_base()}/admin/realms/{realm_name}", headers=headers, json=realm)
+
+
 def master_token() -> str:
     wait_for_keycloak()
     admin_user = os.getenv("KC_ADMIN_USER", os.getenv("KEYCLOAK_ADMIN", "admin"))

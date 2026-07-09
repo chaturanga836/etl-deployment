@@ -1,6 +1,7 @@
 {
   "realm": "workspace-realm",
   "enabled": true,
+  "sslRequired": "none",
   "displayName": "DT Orch Workspace",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
