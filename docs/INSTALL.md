@@ -41,6 +41,20 @@ The API validates `LICENSE_KEY` at startup in production.
 
 The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
+## Clean reinstall
+
+If a previous install failed or you need a fresh start, **always use the wizard** — do not run bootstrap scripts manually on the host.
+
+```bash
+cd ~/etl-deployment
+git pull
+./scripts/reinstall.sh --yes
+```
+
+This removes the platform stack, wizard state, and Postgres volumes, then opens the setup UI at port **3000**. Complete all steps and click **Install**.
+
+Security group (EC2): allow **TCP 3000** (wizard) and **TCP 80** (platform after install).
+
 ## Databases (bundled Postgres)
 
 On first start, `scripts/init-db.sql` creates:

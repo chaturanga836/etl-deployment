@@ -76,7 +76,16 @@ Skips super-admin bootstrap UI flow; uses defaults from `VERSION` / `.env`. Good
 
 Compose: `compose/monolith.yml` (profile `full`).
 
-**Health:** installer waits on `http://localhost/health` (via proxy). API internal health: `http://127.0.0.1:8000/health`.
+**Health:** installer `install.sh` waits for Keycloak (`/realms/master` on `KC_BOOTSTRAP_URL`, up to ~3 min) then API health at `http://localhost/health` (via proxy). Bootstrap scripts run **inside the installer container** (Python + `httpx` preinstalled) — never on host `python3`.
+
+**Post-install bootstrap (automatic via wizard only):**
+
+1. `scripts/install.sh --state-dir /opt/etl-deployment-state full` (includes Keycloak wait)
+2. `scripts/bootstrap-keycloak-realm.py` — import `workspace-realm`
+3. `scripts/bootstrap-superadmin.py` — create super admin from wizard credentials
+4. `POST /api/v1/setup/complete` — register platform super admin
+
+Orchestrator: `installer/backend/app/orchestrator.py` → `_run_bootstrap()`. **Do not run bootstrap scripts manually on the host** during customer installs; fix the wizard flow instead.
 
 ---
 
@@ -289,6 +298,39 @@ docker compose -f compose/monolith.yml --env-file .env --profile full down
 
 Without `--env-file`, compose warns about unset `KC_*` / `DATABASE_URL` variables.
 
+### Clean reinstall (wizard only — preferred)
+
+**Always use this for greenfield or failed installs.** Never patch with manual host-side bootstrap.
+
+```bash
+cd ~/etl-deployment
+git pull   # must include Keycloak wait fixes (post v1.0.3)
+./scripts/reinstall.sh --yes
+```
+
+`reinstall.sh` stops the platform + wizard, deletes installer state volumes, and starts `setup-ui.sh`. Then:
+
+1. Open `http://<host>:3000`
+2. Complete all wizard steps (super admin, DB, license, etc.)
+3. Click **Install** on Confirm — watch live logs; bootstrap runs automatically
+
+Alternative cleanup only (no wizard restart):
+
+```bash
+./scripts/clean-platform.sh --yes
+./scripts/setup-ui.sh
+```
+
+### Keycloak bootstrap failed (`Connection refused` on localhost:8081)
+
+**Root cause (fixed):** bootstrap ran before Keycloak finished starting (~1–3 min on first boot).
+
+**Fix in code:** `compose/monolith.yml` Keycloak healthcheck; `scripts/install.sh` + `scripts/kc_bootstrap_common.py` `wait_for_keycloak()`.
+
+**Agent rule:** do **not** tell users to `pip install httpx` or run bootstrap scripts on the host. Pull latest `etl-deployment`, `./scripts/reinstall.sh --yes`, redo Install in the UI.
+
+If wizard still fails after reinstall: `docker logs elt-keycloak --tail 80` and fix Keycloak/Postgres — not manual bootstrap.
+
 ### git pull blocked on server
 
 Local edits (often `scripts/setup-ui.sh`):
@@ -332,6 +374,7 @@ git pull   # VERSION / IMAGE_TAG updated
 ### Do not
 
 - Assume `./scripts/install.sh` alone replaces the wizard for greenfield setup
+- **Suggest manual host-side fixes** (`pip install httpx`, `python3 scripts/bootstrap-*.py`, hand-editing `.env`) for customer installs — use `./scripts/reinstall.sh` + Install UI instead
 - Use `[[ -d "$host_path" ]]` inside installer container to validate host paths
 - Commit `license-private.pem`
 - Put instance methods on `BaseSettings` in Cythonized `etl-back` packages
@@ -344,7 +387,7 @@ git pull   # VERSION / IMAGE_TAG updated
 | Bind mount / host path | `scripts/install.sh`, `scripts/setup-ui.sh`, `compose/installer.yml` |
 | License trial / signature | `installer/shared/license.py`, `scripts/repair-license-keys.py` |
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
-| Wizard deploy orchestration | `installer/backend/app/orchestrator.py` |
+| Keycloak bootstrap / realm import | `scripts/kc_bootstrap_common.py`, `scripts/install.sh`, `compose/monolith.yml`, `installer/backend/app/orchestrator.py` |
 | Compose / service wiring | `compose/monolith.yml` |
 | Image versions | `VERSION`, `.env.platform.example` |
 
@@ -371,4 +414,4 @@ etl-back/
 
 ---
 
-*Last updated for issues encountered in v1.0.0 self-host installs: Cython/Pydantic `cors_allow_origins`, license keypair mismatch after git pull, installer `ETL_DEPLOYMENT_HOST_ROOT` bind-mount resolution.*
+*Last updated for issues encountered in v1.0.0–v1.0.3 self-host installs: Cython/Pydantic `cors_allow_origins`, license keypair mismatch after git pull, installer `ETL_DEPLOYMENT_HOST_ROOT` bind-mount resolution, Keycloak bootstrap race (wait before realm import).*
