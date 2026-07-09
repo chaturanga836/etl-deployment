@@ -8,14 +8,23 @@ import time
 import httpx
 
 
+def _running_inside_installer() -> bool:
+    """Wizard container: localhost is not the host where Keycloak publishes its port."""
+    return os.path.isfile("/.dockerenv") and os.path.exists("/var/run/docker.sock")
+
+
 def kc_base() -> str:
     """Keycloak base URL reachable from the process running bootstrap."""
+    port = os.getenv("KEYCLOAK_PORT", "8081")
+    if _running_inside_installer():
+        host = os.getenv("KC_INSTALLER_HOST", "host.docker.internal")
+        return f"http://{host}:{port}"
+
     bootstrap = os.getenv("KC_BOOTSTRAP_URL")
     if bootstrap:
         return bootstrap.rstrip("/")
 
     base = os.getenv("KC_SERVER_URL", "http://keycloak:8080").rstrip("/")
-    port = os.getenv("KEYCLOAK_PORT", "8081")
     # KC_SERVER_URL targets the docker network; host-side scripts use localhost.
     if "keycloak" in base:
         return f"http://localhost:{port}"

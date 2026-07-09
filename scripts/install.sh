@@ -433,9 +433,19 @@ show_keycloak_failure_logs() {
   fi
 }
 
+keycloak_bootstrap_base() {
+  local port="${KEYCLOAK_PORT:-8081}"
+  if running_installer_with_docker_sock; then
+    echo "http://${KC_INSTALLER_HOST:-host.docker.internal}:${port}"
+    return 0
+  fi
+  local base="${KC_BOOTSTRAP_URL:-http://localhost:${port}}"
+  echo "${base%/}"
+}
+
 wait_for_keycloak() {
-  local kc_url="${KC_BOOTSTRAP_URL:-http://localhost:${KEYCLOAK_PORT:-8081}}"
-  kc_url="${kc_url%/}/realms/master"
+  local kc_url
+  kc_url="$(keycloak_bootstrap_base)/realms/master"
   echo "Waiting for Keycloak at ${kc_url}..."
   for i in $(seq 1 90); do
     if curl -sf "$kc_url" >/dev/null 2>&1; then

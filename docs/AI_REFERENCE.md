@@ -76,7 +76,7 @@ Skips super-admin bootstrap UI flow; uses defaults from `VERSION` / `.env`. Good
 
 Compose: `compose/monolith.yml` (profile `full`).
 
-**Health:** installer `install.sh` waits for Keycloak (`/realms/master` on `KC_BOOTSTRAP_URL`, up to ~3 min) then API health at `http://localhost/health` (via proxy). Bootstrap scripts run **inside the installer container** (Python + `httpx` preinstalled) — never on host `python3`.
+**Health:** installer `install.sh` waits for Keycloak at `http://host.docker.internal:8081/realms/master` when run inside the wizard container (not `localhost` — that is the installer itself). Then API health at `http://localhost/health` (via proxy on the host network). Bootstrap scripts run **inside the installer container** (Python + `httpx` preinstalled).
 
 **Post-install bootstrap (automatic via wizard only):**
 
@@ -323,13 +323,11 @@ Alternative cleanup only (no wizard restart):
 
 ### Keycloak bootstrap failed (`Connection refused` on localhost:8081)
 
-**Root cause (fixed):** bootstrap ran before Keycloak finished starting (~1–3 min on first boot).
+**Root cause:** `install.sh` and bootstrap scripts ran **inside the installer container**, where `localhost:8081` is not the host-published Keycloak port. Keycloak may already be healthy on the host.
 
-**Fix in code:** `compose/monolith.yml` Keycloak healthcheck; `scripts/install.sh` + `scripts/kc_bootstrap_common.py` `wait_for_keycloak()`.
+**Fix in code:** `compose/installer.yml` adds `host.docker.internal:host-gateway`; `install.sh` and `kc_bootstrap_common.py` use `http://host.docker.internal:${KEYCLOAK_PORT}` when `/.dockerenv` + Docker socket are present.
 
-**Agent rule:** do **not** tell users to `pip install httpx` or run bootstrap scripts on the host. Pull latest `etl-deployment`, `./scripts/reinstall.sh --yes`, redo Install in the UI.
-
-If wizard still fails after reinstall: `docker logs elt-keycloak --tail 80` and fix Keycloak/Postgres — not manual bootstrap.
+**Agent rule:** do **not** tell users to `pip install httpx` or run bootstrap scripts on the host. Recreate the installer (`./scripts/setup-ui.sh` or `reinstall.sh`) so `extra_hosts` applies, then redo Install in the UI.
 
 ### git pull blocked on server
 

@@ -21,6 +21,8 @@ services:
       LICENSE_PRIVATE_KEY_PATH: /opt/etl-deployment/config/license-private.pem
       INSTALLER_PORT: ${INSTALLER_PORT:-3000}
       INSTALLER_PUBLIC_HOST: ${INSTALLER_PUBLIC_HOST:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:
