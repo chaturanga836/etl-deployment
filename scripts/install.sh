@@ -424,6 +424,33 @@ show_api_failure_logs() {
   fi
 }
 
+show_keycloak_failure_logs() {
+  if docker ps -a --format '{{.Names}}' | grep -qx 'elt-keycloak'; then
+    echo ""
+    echo "---- elt-keycloak logs (last 80 lines) ----"
+    docker logs elt-keycloak --tail 80 2>&1 || true
+    echo "------------------------------------------"
+  fi
+}
+
+wait_for_keycloak() {
+  local kc_url="${KC_BOOTSTRAP_URL:-http://localhost:${KEYCLOAK_PORT:-8081}}"
+  kc_url="${kc_url%/}/realms/master"
+  echo "Waiting for Keycloak at ${kc_url}..."
+  for i in $(seq 1 90); do
+    if curl -sf "$kc_url" >/dev/null 2>&1; then
+      echo "Keycloak is ready."
+      return 0
+    fi
+    if [[ "$i" -eq 90 ]]; then
+      echo "Keycloak health check timed out."
+      show_keycloak_failure_logs
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 docker_compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -659,9 +686,12 @@ if [[ "$PROFILE" == "frontend" ]]; then
 fi
 
 if [[ "$PROFILE" == "auth" ]]; then
+  wait_for_keycloak
   echo "Auth profile started. Keycloak: http://localhost:${KEYCLOAK_PORT:-8081}"
   exit 0
 fi
+
+wait_for_keycloak
 
 echo "Waiting for API health at ${HEALTH_URL}..."
 for i in $(seq 1 90); do

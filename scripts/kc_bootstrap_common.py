@@ -22,14 +22,37 @@ def kc_base() -> str:
     return base
 
 
+def wait_for_keycloak(*, attempts: int = 90, sleep_seconds: float = 2.0) -> None:
+    """Block until Keycloak accepts HTTP on the bootstrap URL."""
+    base = kc_base()
+    probe_url = f"{base}/realms/master"
+    last_error = "no response"
+
+    with httpx.Client(timeout=10.0, verify=False) as client:
+        for _ in range(attempts):
+            try:
+                resp = client.get(probe_url)
+                if resp.status_code == 200:
+                    return
+                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            except httpx.HTTPError as exc:
+                last_error = str(exc)
+            time.sleep(sleep_seconds)
+
+    raise RuntimeError(
+        f"Keycloak not ready at {probe_url} after {attempts} attempts: {last_error}"
+    )
+
+
 def master_token() -> str:
+    wait_for_keycloak()
     admin_user = os.getenv("KC_ADMIN_USER", os.getenv("KEYCLOAK_ADMIN", "admin"))
     admin_pass = os.getenv("KC_ADMIN_PASSWORD", os.getenv("KEYCLOAK_ADMIN_PASSWORD", "changeme"))
     url = f"{kc_base()}/realms/master/protocol/openid-connect/token"
     last_error = "no response"
 
     with httpx.Client(timeout=30.0, verify=False) as client:
-        for attempt in range(30):
+        for attempt in range(60):
             try:
                 resp = client.post(
                     url,
@@ -48,5 +71,5 @@ def master_token() -> str:
             time.sleep(2)
 
     raise RuntimeError(
-        f"Could not obtain Keycloak master admin token from {url} after 30 attempts: {last_error}"
+        f"Could not obtain Keycloak master admin token from {url} after 60 attempts: {last_error}"
     )
