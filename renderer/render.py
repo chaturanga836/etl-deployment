@@ -119,7 +119,8 @@ def render_env(config: dict[str, Any]) -> str:
         keycloak_port = ports.get("keycloak", 8081)
 
         app_url = _public_base_url(host, http_port, use_proxy)
-        kc_public = f"http://{host}:{keycloak_port}"
+        # Browser reaches Keycloak via nginx on APP_URL (/realms/), not :8081 on public hosts.
+        kc_public = app_url if use_proxy else f"http://{host}:{keycloak_port}"
         if use_proxy:
             next_public_api = f"{app_url}/api/v1"
         else:
@@ -202,7 +203,7 @@ def render_env(config: dict[str, Any]) -> str:
         use_proxy = config["monolith"].get("use_proxy", True)
         http_port = config["monolith"].get("ports", {}).get("http", 80)
         app_url = _public_base_url(host, http_port, use_proxy)
-        kc_public = f"http://{host}:{keycloak_port}"
+        kc_public = app_url if use_proxy else f"http://{host}:{keycloak_port}"
         lines.extend([
             f"KEYCLOAK_PORT={keycloak_port}",
             f"KC_ADMIN_USER={kc['admin_user']}",
