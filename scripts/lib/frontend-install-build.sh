@@ -265,6 +265,37 @@ PY
   printf '%s' "$kc_url"
 }
 
+# Persist browser-facing URLs into installer .env before compose/build.
+frontend_install_patch_env_public_urls() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 1
+
+  local kc_url app_url api_url
+  kc_url="$(frontend_install_resolve_kc_url "$env_file")"
+  app_url="$(frontend_install_read_env APP_URL "$env_file")"
+  api_url="$(frontend_install_read_env NEXT_PUBLIC_API_URL "$env_file")"
+
+  if [[ -n "$app_url" ]]; then
+    if [[ -z "$api_url" || "$api_url" == *localhost* || "$api_url" == *127.0.0.1* ]]; then
+      api_url="${app_url%/}/api/v1"
+    fi
+  fi
+
+  for pair in "NEXT_PUBLIC_KC_URL=${kc_url}" "NEXT_PUBLIC_API_URL=${api_url}"; do
+    local key="${pair%%=*}" val="${pair#*=}"
+    [[ -n "$val" ]] || continue
+    if grep -q "^${key}=" "$env_file"; then
+      sed -i.bak "s|^${key}=.*|${key}=${val}|" "$env_file"
+    else
+      echo "${key}=${val}" >>"$env_file"
+    fi
+  done
+  rm -f "${env_file}.bak"
+  echo "Patched public URLs in ${env_file}:"
+  echo "  NEXT_PUBLIC_KC_URL=${kc_url}"
+  echo "  NEXT_PUBLIC_API_URL=${api_url}"
+}
+
 frontend_install_pin_frontend_image() {
   local env_file="$1"
   local tag="$2"

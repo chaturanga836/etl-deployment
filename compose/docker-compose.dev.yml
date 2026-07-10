@@ -27,14 +27,5 @@ services:
       dockerfile: Dockerfile
     image: dt-orch-scraper:${IMAGE_TAG:-v1.0.0}
 
-  frontend:
-    build:
-      context: ../../elt-frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_BUILD_ID: ${NEXT_PUBLIC_BUILD_ID:-development}
-        NEXT_PUBLIC_KC_URL: ${NEXT_PUBLIC_KC_URL:-http://localhost:8081}
-        NEXT_PUBLIC_KC_REALM: ${NEXT_PUBLIC_KC_REALM:-workspace-realm}
-        NEXT_PUBLIC_KC_CLIENT_ID: ${NEXT_PUBLIC_KC_CLIENT_ID:-workspace-web}
-    image: dt-orch-frontend:${IMAGE_TAG:-v1.0.0}
+  # Frontend is built by scripts/lib/frontend-install-build.sh during install
+  # (correct NEXT_PUBLIC_KC_URL = APP_URL). Do not rebuild here — dev default was localhost:8081.

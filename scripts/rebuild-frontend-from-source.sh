@@ -54,6 +54,7 @@ fi
 
 export ETL_DEPLOYMENT_HOST_ROOT="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
 
+frontend_install_patch_env_public_urls "$env_file" || true
 frontend_install_build "$ROOT_DIR" "$env_file" "$TAG"
 export ENV_FILE="$env_file"
 

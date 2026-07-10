@@ -417,19 +417,24 @@ prefer_local_fixed_api_image() {
 
 build_install_frontend_image() {
   local ef="$1"
-  if [[ "$DEV_BUILD" == true ]]; then
-    return 0
-  fi
   if [[ "${BUILD_INSTALL_FRONTEND:-true}" != "true" ]]; then
     return 0
   fi
   # shellcheck source=lib/frontend-install-build.sh
   source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
+  frontend_install_patch_env_public_urls "$ef" || true
   if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install"; then
     return 0
   fi
+  if [[ "$DEV_BUILD" == true ]]; then
+    echo "ERROR: Frontend build failed in dev/source mode — cannot use registry image with localhost Keycloak URLs." >&2
+    echo "Ensure elt-frontend is present (sibling of etl-deployment) and run install again." >&2
+    return 1
+  fi
   frontend_install_restore_registry_frontend_image "$ef" || true
   echo "WARN: Install-time frontend build skipped; using registry FRONTEND_IMAGE from .env." >&2
+  echo "WARN: If login redirects to localhost:8081, run: bash scripts/rebuild-frontend-from-source.sh" >&2
+  return 0
 }
 
 show_api_failure_logs() {
@@ -656,7 +661,9 @@ preflight_bind_mounts
 preflight_license_key
 prepare_runtime_env "$EF"
 prefer_local_fixed_api_image "$EF"
-build_install_frontend_image "$EF"
+if ! build_install_frontend_image "$EF"; then
+  exit 1
+fi
 # shellcheck disable=SC1091
 set -a
 source "$EF"
