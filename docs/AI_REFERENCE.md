@@ -300,24 +300,29 @@ Without `--env-file`, compose warns about unset `KC_*` / `DATABASE_URL` variable
 
 ### Clean reinstall (wizard only — preferred)
 
-**Standard recovery when anything is broken.** One command:
+**Single command — same for new EC2 and broken installs:**
 
 ```bash
 cd ~/etl-deployment
 ./scripts/fresh-install.sh --yes
 ```
 
-`fresh-install.sh` → `git pull` → `clean-platform.sh` → `setup-ui.sh`. Then complete Install in the browser.
+Then: browser → `http://<host>:3000` → all wizard steps → **Install** → `http://<host>/login`.
 
-Equivalent:
+`fresh-install.sh` = `git pull` + `clean-platform.sh` + `setup-ui.sh`.
 
-```bash
-git pull
-./scripts/clean-platform.sh --yes
-./scripts/setup-ui.sh -d
-```
+### Agent policy: no mid-install quick fixes
 
-`clean-platform.sh` also removes per-org Centrifugo brokers (`org-*-centrifugo-broker`) and `data-plane-net`.
+When install or login is broken, **never** tell the user to run:
+
+- `python3 scripts/bootstrap-*.py` on the host
+- `pip install httpx` (or any host Python packages)
+- `rebuild-frontend-from-source.sh` as a one-off patch
+- Hand-edit `.env` on the server
+
+**Always:** fix code in `etl-deployment` / app repos → push → user runs `./scripts/fresh-install.sh --yes` → full Install UI.
+
+Vendor-only exception: `rebuild-frontend-from-source.sh` and `rebuild-api-from-source.sh` are **dev/vendor** tools, not customer recovery.
 
 ### Keycloak bootstrap failed (`Connection refused` on localhost:8081)
 
@@ -379,7 +384,7 @@ git pull   # VERSION / IMAGE_TAG updated
 ### Do not
 
 - Assume `./scripts/install.sh` alone replaces the wizard for greenfield setup
-- **Suggest manual host-side fixes** (`pip install httpx`, `python3 scripts/bootstrap-*.py`, hand-editing `.env`) for customer installs — use `./scripts/reinstall.sh` + Install UI instead
+- **Suggest manual host-side or mid-install quick fixes** — no `pip install`, `bootstrap-*.py`, `rebuild-frontend-from-source.sh`, or hand-edited `.env` on customer hosts; use **`./scripts/fresh-install.sh --yes`** and the Install UI after fixing code
 - Use `[[ -d "$host_path" ]]` inside installer container to validate host paths
 - Commit `license-private.pem`
 - Put instance methods on `BaseSettings` in Cythonized `etl-back` packages
@@ -392,7 +397,7 @@ git pull   # VERSION / IMAGE_TAG updated
 | Bind mount / host path | `scripts/install.sh`, `scripts/setup-ui.sh`, `compose/installer.yml` |
 | License trial / signature | `installer/shared/license.py`, `scripts/repair-license-keys.py` |
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
-| Keycloak bootstrap / realm import | `scripts/kc_bootstrap_common.py`, `scripts/install.sh`, `compose/monolith.yml`, `installer/backend/app/orchestrator.py` |
+| Login → `localhost:8081` | `scripts/lib/frontend-install-build.sh`, `scripts/install.sh`, `elt-frontend/src/lib/keycloak.ts` — then **fresh install**, not rebuild mid-flight |
 | Compose / service wiring | `compose/monolith.yml` |
 | Image versions | `VERSION`, `.env.platform.example` |
 

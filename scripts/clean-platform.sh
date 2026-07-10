@@ -75,16 +75,16 @@ docker ps -a --format '{{.Names}}' | grep -E '^(org-[0-9]+-.*-broker|ws-[0-9]+-.
 
 echo "=== Removing DT Orch volumes ==="
 docker volume ls -q | grep -E '^(dt-orch_|etl-deployment_)' | xargs -r docker volume rm 2>/dev/null || true
-for vol in etl-deployment_installer_state compose_installer_state installer_state; do
-  docker volume rm "$vol" 2>/dev/null || true
-done
+docker volume ls -q | grep -E 'installer_state$' | xargs -r docker volume rm 2>/dev/null || true
 
 echo "=== Removing DT Orch networks ==="
 docker network ls -q --filter name=dt-orch | xargs -r docker network rm 2>/dev/null || true
 docker network rm data-plane-net 2>/dev/null || true
 
+rm -f "${ROOT_DIR}/.frontend-rebuild.env"
+
 echo ""
 echo "Cleanup complete. Remaining containers:"
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
 echo ""
-echo "Next: ./scripts/reinstall.sh --yes"
+echo "Next: ./scripts/fresh-install.sh --yes   (or ./scripts/setup-ui.sh -d if already clean)"

@@ -41,48 +41,53 @@ The API validates `LICENSE_KEY` at startup in production.
 
 The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
-## Clean reinstall (standard recovery)
+## Fresh install (new EC2 or broken platform)
 
-**When any part of the install or platform is broken, use this process.** Do not run manual bootstrap scripts, `pip install` on the host, or hand-edit `.env` for first-time setup — fix the wizard flow and reinstall.
+**Use one flow only.** Do not patch a half-working install with manual scripts (`bootstrap-*.py`, `pip install`, `rebuild-frontend-from-source.sh`, hand-edited `.env`). Fix bugs in `etl-deployment` / app repos, push, then run fresh install again.
+
+### First time on EC2
 
 ```bash
-cd ~/etl-deployment   # or your checkout path
+sudo apt-get update && sudo apt-get install -y git docker.io docker-compose-v2
+sudo usermod -aG docker "$USER"
+# log out and back in
+
+git clone https://github.com/chaturanga836/etl-deployment.git
+cd etl-deployment
 ./scripts/fresh-install.sh --yes
 ```
 
-This will:
-
-1. `git pull` latest `etl-deployment`
-2. Remove all DT Orch containers, volumes, and networks (including per-org Centrifugo brokers)
-3. Start the setup wizard
-
-Then in the browser:
-
-1. Open `http://<server-ip>:3000`
-2. Complete every wizard step (super admin, database, license, public host, etc.)
-3. Click **Install** on Confirm and watch the live log
-
-After success: `http://<server-ip>/login`
-
-**EC2 security group:** TCP **3000** (wizard), TCP **80** (platform).
-
-Equivalent steps:
+### Reset after a failed or broken install
 
 ```bash
-git pull
-./scripts/clean-platform.sh --yes
-./scripts/setup-ui.sh -d
+cd ~/etl-deployment
+./scripts/fresh-install.sh --yes
 ```
 
-Vendor-only API rebuild before wizard: `./scripts/reinstall.sh --yes --vendor-build-api`
+### What `fresh-install.sh` does
 
-**Login redirects to `localhost:8081`:** the GHCR frontend image bakes in `localhost`. Rebuild from wizard `.env` (uses your public host):
+1. `git pull` — latest installer scripts and `VERSION`
+2. `clean-platform.sh` — stops and removes all DT Orch containers, volumes (Postgres, wizard state), per-org Centrifugo brokers, and `data-plane-net`
+3. `setup-ui.sh` — starts Install UI on port **3000**
 
-```bash
-bash scripts/rebuild-frontend-from-source.sh
-```
+### In the browser
 
-Future installs run this automatically during `install.sh`. Hard-refresh the browser after recreate.
+1. Open `http://<EC2-public-ip>:3000`
+2. Complete **every** wizard step (registry, super admin, database, license, **public host** = your EC2 IP)
+3. Click **Install** on Confirm — watch live logs until done
+4. Open `http://<EC2-public-ip>/login`
+
+**EC2 security group:** inbound TCP **3000** (wizard), TCP **80** (platform).
+
+`install.sh` (run by the wizard) builds the frontend image with your **public host** from the wizard — do not rely on pre-built GHCR frontend alone for Keycloak URLs.
+
+### VERSION and images
+
+`VERSION` in this repo must match tags that exist on GHCR for **all four** images (`dt-orch-api`, `dt-orch-frontend`, `baas-infra`, `dt-orch-scraper`). If the wizard reports images `not_found`, keep `VERSION` at the last complete release until CI publishes a new tag.
+
+## Clean reinstall (standard recovery)
+
+> **Deprecated section** — use [Fresh install](#fresh-install-new-ec2-or-broken-platform) above. Same command: `./scripts/fresh-install.sh --yes`.
 
 ## Databases (bundled Postgres)
 

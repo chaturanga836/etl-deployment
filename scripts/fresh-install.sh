@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Standard recovery: wipe DT Orch Docker state and run the setup wizard from scratch.
-# Use whenever install is broken — do not patch with manual bootstrap or host-side fixes.
+# Fresh EC2 install — wipe all DT Orch Docker state and start the Install UI.
+# Canonical path for first-time install AND any broken install. No mid-flight quick fixes.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,19 +13,24 @@ usage() {
   cat <<'EOF'
 Usage: fresh-install.sh [OPTIONS]
 
-Official recovery when any part of the platform is broken:
-  1. git pull (latest etl-deployment fixes)
-  2. ./scripts/clean-platform.sh — remove all DT Orch containers, volumes, networks
-  3. ./scripts/setup-ui.sh — start the Install UI
+Official install / recovery (same flow for new EC2 or broken platform):
 
-Then complete every wizard step and click Install (no manual .env or bootstrap scripts).
+  1. git pull
+  2. clean-platform.sh  — remove ALL DT Orch containers, volumes, wizard state
+  3. setup-ui.sh        — start Install UI on port 3000
+
+Then in the browser: complete every wizard step → Install → login.
+
+Do NOT use manual bootstrap, pip install on host, rebuild-frontend mid-install,
+or hand-edited .env — fix code in this repo, then run this script again.
 
 Options:
-  --yes, -y       Skip all confirmation prompts
+  --yes, -y       Skip confirmation prompts
   --skip-pull     Do not run git pull
   -h, --help      Show help
 
-EC2 security group: TCP 3000 (wizard), TCP 80 (platform after install).
+EC2 security group: inbound TCP 3000 (wizard), TCP 80 (platform).
+VERSION must match published GHCR images (see VERSION file).
 EOF
 }
 
@@ -38,10 +43,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+cat <<'EOF'
+
+================================================================
+  DT Orch — fresh install (clean slate)
+================================================================
+  • Removes platform + wizard + Postgres data + installer state
+  • Leaves Jenkins, Dozzle, and other non-DT-Orch containers alone
+  • After wizard starts: open http://<EC2-IP>:3000 and click Install
+================================================================
+
+EOF
+
 if [[ "$SKIP_PULL" != true ]] && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "=== Pulling latest etl-deployment ==="
   if ! git -C "$ROOT_DIR" pull --ff-only; then
-    echo "WARN: git pull failed (local changes or diverged branch). Continuing with checkout on disk." >&2
+    echo "WARN: git pull failed — continuing with files on disk." >&2
   fi
 fi
 
