@@ -76,13 +76,13 @@ git pull
 
 Vendor-only API rebuild before wizard: `./scripts/reinstall.sh --yes --vendor-build-api`
 
-**Login redirects to `localhost:8081`:** the running `dt-orch-frontend` image must include the Keycloak hostname fix (elt-frontend `v1.0.4+`). Fresh install alone is not enough if `IMAGE_TAG` still points at an older frontend. On the server:
+**Login redirects to `localhost:8081`:** rebuild the frontend from source after install (do not bump `VERSION` until all GHCR images exist):
 
 ```bash
 bash scripts/rebuild-frontend-from-source.sh
 ```
 
-Or tag `elt-frontend` `v1.0.4`, wait for GHCR publish, bump `VERSION`, then `./scripts/fresh-install.sh --yes`.
+When **all four** images are on GHCR at the same tag, bump `VERSION` in `etl-deployment` and run `./scripts/fresh-install.sh --yes`.
 
 ## Databases (bundled Postgres)
 

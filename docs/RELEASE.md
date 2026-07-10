@@ -53,6 +53,8 @@ If unset, release builds use localhost defaults (fine for dev; set vars for prod
 
 `upgrade.sh` pulls the latest `etl-deployment` manifest, syncs `IMAGE_TAG` from `VERSION` into `.env`, pulls images, and recreates services.
 
+**Important:** [VERSION](VERSION) `platform` must match a tag where **all four** GHCR images exist (`dt-orch-api`, `dt-orch-frontend`, `baas-infra`, `dt-orch-scraper`). If only some images are published (e.g. scraper `v1.0.4` but API still `v1.0.3`), keep `VERSION` at the last complete release. For a **frontend-only** fix, install at `v1.0.3` and run `scripts/rebuild-frontend-from-source.sh` on the server.
+
 **One-time CI setup:** add org/repo secret `RELEASE_PAT` (PAT with `repo` + `workflow` on all DT Orch repos) to `etl-back` and `etl-deployment`. For GHCR visibility automation on personal accounts, also add `PACKAGES_TOKEN` (PAT with `write:packages`, or include that scope on `RELEASE_PAT`).
 
 Manual trigger: **Actions → Platform release → Run workflow** (optional `version` or `bump`).
