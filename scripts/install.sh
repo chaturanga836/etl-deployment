@@ -415,6 +415,19 @@ prefer_local_fixed_api_image() {
   echo "Using locally built API image: ${tag}"
 }
 
+build_install_frontend_image() {
+  local ef="$1"
+  if [[ "$DEV_BUILD" == true ]]; then
+    return 0
+  fi
+  if [[ "${BUILD_INSTALL_FRONTEND:-true}" != "true" ]]; then
+    return 0
+  fi
+  # shellcheck source=lib/frontend-install-build.sh
+  source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
+  frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install" || return 0
+}
+
 show_api_failure_logs() {
   if docker ps -a --format '{{.Names}}' | grep -qx 'dt-orch-api'; then
     echo ""
@@ -639,6 +652,7 @@ preflight_bind_mounts
 preflight_license_key
 prepare_runtime_env "$EF"
 prefer_local_fixed_api_image "$EF"
+build_install_frontend_image "$EF"
 # shellcheck disable=SC1091
 set -a
 source "$EF"

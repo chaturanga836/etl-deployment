@@ -76,13 +76,13 @@ git pull
 
 Vendor-only API rebuild before wizard: `./scripts/reinstall.sh --yes --vendor-build-api`
 
-**Login redirects to `localhost:8081`:** rebuild the frontend from source after install (do not bump `VERSION` until all GHCR images exist):
+**Login redirects to `localhost:8081`:** the GHCR frontend image bakes in `localhost`. Rebuild from wizard `.env` (uses your public host):
 
 ```bash
 bash scripts/rebuild-frontend-from-source.sh
 ```
 
-When **all four** images are on GHCR at the same tag, bump `VERSION` in `etl-deployment` and run `./scripts/fresh-install.sh --yes`.
+Future installs run this automatically during `install.sh`. Hard-refresh the browser after recreate.
 
 ## Databases (bundled Postgres)
 
