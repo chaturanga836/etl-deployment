@@ -27,6 +27,15 @@ frontend_install_resolve_env_file() {
       echo "$mount/.env"
       return
     fi
+    # Volume mountpoints are often root-only on Linux — read via a throwaway container.
+    if docker volume inspect "$vol" >/dev/null 2>&1; then
+      if docker run --rm -v "${vol}:/state:ro" alpine:3.20 test -f /state/.env 2>/dev/null; then
+        local tmp="${root_dir}/.installer-state.env"
+        docker run --rm -v "${vol}:/state:ro" alpine:3.20 cat /state/.env >"$tmp"
+        echo "$tmp"
+        return
+      fi
+    fi
   done
 
   # Any docker volume ending in installer_state (compose project name varies).
@@ -38,7 +47,18 @@ frontend_install_resolve_env_file() {
       echo "$mount/.env"
       return
     fi
+    if docker run --rm -v "${vol_name}:/state:ro" alpine:3.20 test -f /state/.env 2>/dev/null; then
+      local tmp="${root_dir}/.installer-state.env"
+      docker run --rm -v "${vol_name}:/state:ro" alpine:3.20 cat /state/.env >"$tmp"
+      echo "$tmp"
+      return
+    fi
   done < <(docker volume ls -q | grep -E 'installer_state$' || true)
+
+  if [[ -f "${root_dir}/.install.state.env" ]]; then
+    echo "${root_dir}/.install.state.env"
+    return
+  fi
 
   if [[ -f "${root_dir}/.env" ]]; then
     echo "${root_dir}/.env"
@@ -319,6 +339,37 @@ frontend_install_restore_registry_frontend_image() {
   image="${url}/dt-orch-frontend:${tag}"
   frontend_install_pin_frontend_image "$env_file" "$image"
   echo "Using registry frontend image: ${image}"
+}
+
+# Wizard installs must use a locally built frontend — registry images bake localhost Keycloak URLs.
+frontend_install_verify_image() {
+  local env_file="$1"
+  local image
+  image="$(frontend_install_read_env FRONTEND_IMAGE "$env_file")"
+  if [[ "$image" == ghcr.io/* ]]; then
+    echo "ERROR: Wizard install is using registry frontend (${image})." >&2
+    echo "       Registry images ship with NEXT_PUBLIC_KC_URL=http://localhost:8081." >&2
+    echo "       Re-run install after fixing the frontend build, or run:" >&2
+    echo "       bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Snapshot wizard .env onto the host checkout for diagnose/rebuild scripts.
+frontend_install_snapshot_env_on_host() {
+  local env_file="$1"
+  local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-}"
+  [[ -f "$env_file" && -n "$host_root" ]] || return 0
+  local dest="${host_root}/.install.state.env"
+  if frontend_install_in_installer; then
+    docker run --rm -v "${host_root}:/work:rw" alpine:3.20 sh -ec "
+      cat > /work/.install.state.env
+    " <"$env_file"
+  else
+    cp "$env_file" "$dest"
+  fi
+  echo "Saved install .env snapshot: ${dest}"
 }
 
 # Build image and pin FRONTEND_IMAGE in env on success only.

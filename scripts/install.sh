@@ -424,11 +424,16 @@ build_install_frontend_image() {
   source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
   frontend_install_patch_env_public_urls "$ef" || true
   if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install"; then
+    if [[ -n "${STATE_DIR:-}" ]]; then
+      frontend_install_verify_image "$ef" || return 1
+    fi
+    frontend_install_snapshot_env_on_host "$ef" || true
     return 0
   fi
-  if [[ "$DEV_BUILD" == true ]]; then
-    echo "ERROR: Frontend build failed in dev/source mode — cannot use registry image with localhost Keycloak URLs." >&2
-    echo "Ensure elt-frontend is present (sibling of etl-deployment) and run install again." >&2
+  if [[ -n "${STATE_DIR:-}" ]] || [[ "$DEV_BUILD" == true ]]; then
+    echo "ERROR: Frontend build failed — cannot install with registry image (localhost Keycloak URLs)." >&2
+    echo "Common causes: git clone failed, npm build OOM, missing ETL_DEPLOYMENT_HOST_ROOT." >&2
+    echo "On the EC2 host after fixing: bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_IP" >&2
     return 1
   fi
   frontend_install_restore_registry_frontend_image "$ef" || true
