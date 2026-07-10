@@ -69,6 +69,10 @@ for name in \
   docker rm -f "$name" 2>/dev/null || true
 done
 
+echo "=== Removing per-org / per-workspace data-plane containers ==="
+docker ps -a --format '{{.Names}}' | grep -E '^(org-[0-9]+-.*-broker|ws-[0-9]+-.*-(db|storage)|platform-shared-.*-storage)$' \
+  | xargs -r docker rm -f 2>/dev/null || true
+
 echo "=== Removing DT Orch volumes ==="
 docker volume ls -q | grep -E '^(dt-orch_|etl-deployment_)' | xargs -r docker volume rm 2>/dev/null || true
 for vol in etl-deployment_installer_state compose_installer_state installer_state; do
@@ -77,9 +81,10 @@ done
 
 echo "=== Removing DT Orch networks ==="
 docker network ls -q --filter name=dt-orch | xargs -r docker network rm 2>/dev/null || true
+docker network rm data-plane-net 2>/dev/null || true
 
 echo ""
 echo "Cleanup complete. Remaining containers:"
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
 echo ""
-echo "Next: ./scripts/reinstall.sh --yes   (or setup-ui.sh after building dt-orch-api:fixed)"
+echo "Next: ./scripts/reinstall.sh --yes"

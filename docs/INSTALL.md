@@ -41,19 +41,40 @@ The API validates `LICENSE_KEY` at startup in production.
 
 The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
-## Clean reinstall
+## Clean reinstall (standard recovery)
 
-If a previous install failed or you need a fresh start, **always use the wizard** — do not run bootstrap scripts manually on the host.
+**When any part of the install or platform is broken, use this process.** Do not run manual bootstrap scripts, `pip install` on the host, or hand-edit `.env` for first-time setup — fix the wizard flow and reinstall.
 
 ```bash
-cd ~/etl-deployment
-git pull
-./scripts/reinstall.sh --yes
+cd ~/etl-deployment   # or your checkout path
+./scripts/fresh-install.sh --yes
 ```
 
-This removes the platform stack, wizard state, and Postgres volumes, then opens the setup UI at port **3000**. Complete all steps and click **Install**.
+This will:
 
-Security group (EC2): allow **TCP 3000** (wizard) and **TCP 80** (platform after install).
+1. `git pull` latest `etl-deployment`
+2. Remove all DT Orch containers, volumes, and networks (including per-org Centrifugo brokers)
+3. Start the setup wizard
+
+Then in the browser:
+
+1. Open `http://<server-ip>:3000`
+2. Complete every wizard step (super admin, database, license, public host, etc.)
+3. Click **Install** on Confirm and watch the live log
+
+After success: `http://<server-ip>/login`
+
+**EC2 security group:** TCP **3000** (wizard), TCP **80** (platform).
+
+Equivalent steps:
+
+```bash
+git pull
+./scripts/clean-platform.sh --yes
+./scripts/setup-ui.sh -d
+```
+
+Vendor-only API rebuild before wizard: `./scripts/reinstall.sh --yes --vendor-build-api`
 
 ## Databases (bundled Postgres)
 

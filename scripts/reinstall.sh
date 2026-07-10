@@ -98,10 +98,11 @@ if [[ "$ASSUME_YES" != true ]]; then
   cat <<EOF
 This will:
   - Stop and remove all DT Orch platform containers (profile: full)
-  - Delete Postgres and other platform volumes (all application data)
-  - Stop the setup wizard and clear installer state
-  - Clone etl-back and build ${API_TAG} (only with --vendor-build-api)
+  - Delete Postgres, installer state, and other platform volumes
+  - Remove per-org Centrifugo / workspace data-plane containers
   - Restart the setup wizard
+
+Prefer: ./scripts/fresh-install.sh --yes  (also runs git pull)
 
 Continue? [y/N]
 EOF
@@ -112,28 +113,9 @@ EOF
   esac
 fi
 
-echo "Stopping platform stack..."
-ENV_FILE_ARG=()
-if [[ -f "${STATE_DIR}/.env" ]]; then
-  ENV_FILE_ARG=(--env-file "${STATE_DIR}/.env")
-elif [[ -f "${ROOT_DIR}/.env" ]]; then
-  ENV_FILE_ARG=(--env-file "${ROOT_DIR}/.env")
-fi
-
-export ETL_DEPLOYMENT_HOST_ROOT="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
-docker compose -f compose/monolith.yml "${ENV_FILE_ARG[@]}" --profile full down -v --remove-orphans 2>/dev/null || true
-
-echo "Stopping setup wizard..."
-INSTALLER_COMPOSE=(-f compose/installer.yml)
-if [[ -f "${ETL_BACK}/Dockerfile" ]]; then
-  INSTALLER_COMPOSE+=(-f compose/installer.dev.yml)
-fi
-docker compose "${INSTALLER_COMPOSE[@]}" down -v --remove-orphans 2>/dev/null || true
-
-echo "Removing installer state volume (if present)..."
-for vol in etl-deployment_installer_state compose_installer_state installer_state; do
-  docker volume rm "$vol" 2>/dev/null || true
-done
+CLEAN_ARGS=()
+[[ "$ASSUME_YES" == true ]] && CLEAN_ARGS+=(--yes)
+"${ROOT_DIR}/scripts/clean-platform.sh" "${CLEAN_ARGS[@]}"
 
 if [[ "$SKIP_API_BUILD" != true ]] || [[ "$VENDOR_BUILD_API" == true ]]; then
   if docker image inspect "$API_TAG" >/dev/null 2>&1; then

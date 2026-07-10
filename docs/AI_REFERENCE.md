@@ -300,26 +300,24 @@ Without `--env-file`, compose warns about unset `KC_*` / `DATABASE_URL` variable
 
 ### Clean reinstall (wizard only — preferred)
 
-**Always use this for greenfield or failed installs.** Never patch with manual host-side bootstrap.
+**Standard recovery when anything is broken.** One command:
 
 ```bash
 cd ~/etl-deployment
-git pull   # must include Keycloak wait fixes (post v1.0.3)
-./scripts/reinstall.sh --yes
+./scripts/fresh-install.sh --yes
 ```
 
-`reinstall.sh` stops the platform + wizard, deletes installer state volumes, and starts `setup-ui.sh`. Then:
+`fresh-install.sh` → `git pull` → `clean-platform.sh` → `setup-ui.sh`. Then complete Install in the browser.
 
-1. Open `http://<host>:3000`
-2. Complete all wizard steps (super admin, DB, license, etc.)
-3. Click **Install** on Confirm — watch live logs; bootstrap runs automatically
-
-Alternative cleanup only (no wizard restart):
+Equivalent:
 
 ```bash
+git pull
 ./scripts/clean-platform.sh --yes
-./scripts/setup-ui.sh
+./scripts/setup-ui.sh -d
 ```
+
+`clean-platform.sh` also removes per-org Centrifugo brokers (`org-*-centrifugo-broker`) and `data-plane-net`.
 
 ### Keycloak bootstrap failed (`Connection refused` on localhost:8081)
 
@@ -371,6 +369,7 @@ git pull   # VERSION / IMAGE_TAG updated
 ### Do
 
 - Prefer **wizard** (`setup-ui.sh`) for customer first-time install
+- Use **`./scripts/fresh-install.sh --yes`** when any install/platform piece is broken (standard recovery)
 - Set / verify `ETL_DEPLOYMENT_HOST_ROOT` when debugging installer deploys
 - Run `repair-license-keys.py` when license signature errors appear after `git pull`
 - Keep Pydantic settings/models out of Cython targets; use module-level functions
@@ -409,6 +408,8 @@ etl-deployment/
   installer/backend/app/orchestrator.py
   scripts/install.sh
   scripts/setup-ui.sh
+  scripts/fresh-install.sh
+  scripts/clean-platform.sh
   config/license-public.pem      # Tracked; must match private key on host
 
 etl-back/
