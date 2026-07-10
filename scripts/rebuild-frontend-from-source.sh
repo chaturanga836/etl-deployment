@@ -52,9 +52,9 @@ if [[ -z "$env_file" ]]; then
   echo "Using generated env: $env_file"
 fi
 
-frontend_install_build "$ROOT_DIR" "$env_file" "$TAG"
-
 export ETL_DEPLOYMENT_HOST_ROOT="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
+
+frontend_install_build "$ROOT_DIR" "$env_file" "$TAG"
 export ENV_FILE="$env_file"
 
 echo "Recreating frontend..."

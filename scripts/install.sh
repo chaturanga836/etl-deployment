@@ -425,7 +425,11 @@ build_install_frontend_image() {
   fi
   # shellcheck source=lib/frontend-install-build.sh
   source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
-  frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install" || return 0
+  if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install"; then
+    return 0
+  fi
+  frontend_install_restore_registry_frontend_image "$ef" || true
+  echo "WARN: Install-time frontend build skipped; using registry FRONTEND_IMAGE from .env." >&2
 }
 
 show_api_failure_logs() {

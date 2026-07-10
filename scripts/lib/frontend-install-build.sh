@@ -2,6 +2,10 @@
 # Build dt-orch-frontend for install using NEXT_PUBLIC_* from the wizard .env.
 # Sourced by install.sh and rebuild-frontend-from-source.sh — do not execute directly.
 
+frontend_install_in_installer() {
+  [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]
+}
+
 frontend_install_resolve_env_file() {
   local root_dir="$1"
   local state_dir="${2:-}"
@@ -114,15 +118,113 @@ frontend_install_read_env() {
   printf '%s' "$val"
 }
 
-frontend_install_ensure_checkout() {
+# Host path for elt-frontend checkout (Docker build context on the host daemon).
+frontend_install_resolve_frontend_dir() {
+  local root_dir="$1"
+
+  if [[ -n "${ELT_FRONTEND:-}" ]]; then
+    echo "${ELT_FRONTEND}"
+    return 0
+  fi
+
+  local host_root="${ETL_DEPLOYMENT_HOST_ROOT:-}"
+  if frontend_install_in_installer; then
+    if [[ -z "$host_root" ]]; then
+      echo "ERROR: ETL_DEPLOYMENT_HOST_ROOT is required to build the frontend inside the setup wizard." >&2
+      return 1
+    fi
+    echo "$(dirname "$host_root")/elt-frontend"
+    return 0
+  fi
+
+  host_root="$(cd "$root_dir" && pwd)"
+  echo "$(dirname "$host_root")/elt-frontend"
+}
+
+frontend_install_host_dockerfile_exists() {
   local frontend_dir="$1"
-  local repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
+  local name parent
+
   if [[ -f "${frontend_dir}/Dockerfile" ]]; then
     return 0
   fi
+
+  if ! frontend_install_in_installer; then
+    return 1
+  fi
+
+  name="$(basename "$frontend_dir")"
+  parent="$(dirname "$frontend_dir")"
+  docker run --rm -v "${parent}:/work:ro" alpine:3.20 test -f "/work/${name}/Dockerfile"
+}
+
+frontend_install_ensure_checkout() {
+  local frontend_dir="$1"
+  local repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
+  local ref="${ELT_FRONTEND_REF:-}"
+  local name parent
+
+  if frontend_install_host_dockerfile_exists "$frontend_dir"; then
+    return 0
+  fi
+
+  name="$(basename "$frontend_dir")"
+  parent="$(dirname "$frontend_dir")"
+
   echo "Cloning elt-frontend into ${frontend_dir} ..."
-  mkdir -p "$(dirname "$frontend_dir")"
-  git clone --depth 1 "$repo" "$frontend_dir"
+  if frontend_install_in_installer; then
+    if [[ -n "$ref" ]]; then
+      docker run --rm \
+        -v "${parent}:/work" \
+        alpine:3.20 sh -ec "
+          apk add --no-cache git >/dev/null
+          rm -rf /work/${name}
+          git clone --depth 1 -b '${ref}' '${repo}' /work/${name}
+          test -f /work/${name}/Dockerfile
+        "
+    else
+      docker run --rm \
+        -v "${parent}:/work" \
+        alpine:3.20 sh -ec "
+          apk add --no-cache git >/dev/null
+          rm -rf /work/${name}
+          git clone --depth 1 '${repo}' /work/${name}
+          test -f /work/${name}/Dockerfile
+        "
+    fi
+    return
+  fi
+
+  if command -v git >/dev/null 2>&1; then
+    mkdir -p "$parent"
+    if [[ -n "$ref" ]]; then
+      git clone --depth 1 -b "$ref" "$repo" "$frontend_dir"
+    else
+      git clone --depth 1 "$repo" "$frontend_dir"
+    fi
+    [[ -f "${frontend_dir}/Dockerfile" ]]
+    return
+  fi
+
+  if [[ -n "$ref" ]]; then
+    docker run --rm \
+      -v "${parent}:/work" \
+      alpine:3.20 sh -ec "
+        apk add --no-cache git >/dev/null
+        rm -rf /work/${name}
+        git clone --depth 1 -b '${ref}' '${repo}' /work/${name}
+        test -f /work/${name}/Dockerfile
+      "
+  else
+    docker run --rm \
+      -v "${parent}:/work" \
+      alpine:3.20 sh -ec "
+        apk add --no-cache git >/dev/null
+        rm -rf /work/${name}
+        git clone --depth 1 '${repo}' /work/${name}
+        test -f /work/${name}/Dockerfile
+      "
+  fi
 }
 
 # Resolve public Keycloak URL for the browser bundle (never leave localhost on customer hosts).
@@ -152,12 +254,37 @@ PY
   printf '%s' "$kc_url"
 }
 
-# Build image and pin FRONTEND_IMAGE in env. Sets FRONTEND_IMAGE in caller's shell via stdout eval or return var.
+frontend_install_pin_frontend_image() {
+  local env_file="$1"
+  local tag="$2"
+
+  if grep -q '^FRONTEND_IMAGE=' "$env_file"; then
+    sed -i.bak "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${tag}|" "$env_file"
+  else
+    echo "FRONTEND_IMAGE=${tag}" >>"$env_file"
+  fi
+  rm -f "${env_file}.bak"
+  export FRONTEND_IMAGE="$tag"
+  echo "Pinned FRONTEND_IMAGE=${tag} in ${env_file}"
+}
+
+frontend_install_restore_registry_frontend_image() {
+  local env_file="$1"
+  local url tag image
+  url="$(frontend_install_read_env REGISTRY_URL "$env_file")"
+  tag="$(frontend_install_read_env IMAGE_TAG "$env_file")"
+  [[ -n "$url" && -n "$tag" ]] || return 0
+  image="${url}/dt-orch-frontend:${tag}"
+  frontend_install_pin_frontend_image "$env_file" "$image"
+  echo "Using registry frontend image: ${image}"
+}
+
+# Build image and pin FRONTEND_IMAGE in env on success only.
 frontend_install_build() {
   local root_dir="$1"
   local env_file="$2"
   local tag="${3:-dt-orch-frontend:install}"
-  local frontend_dir="${ELT_FRONTEND:-$root_dir/../elt-frontend}"
+  local frontend_dir=""
 
   [[ -f "$env_file" ]] || {
     echo "WARN: No .env for frontend build — using registry FRONTEND_IMAGE." >&2
@@ -176,26 +303,29 @@ frontend_install_build() {
   kc_client="${kc_client:-workspace-web}"
   build_id="${build_id:-install}"
 
-  frontend_install_ensure_checkout "$frontend_dir"
+  if ! frontend_dir="$(frontend_install_resolve_frontend_dir "$root_dir")"; then
+    return 1
+  fi
+
+  if ! frontend_install_ensure_checkout "$frontend_dir"; then
+    echo "ERROR: Could not prepare elt-frontend source at ${frontend_dir}" >&2
+    return 1
+  fi
 
   echo "Building install frontend as ${tag}"
+  echo "  source=${frontend_dir}"
   echo "  NEXT_PUBLIC_KC_URL=${kc_url}"
   echo "  NEXT_PUBLIC_API_URL=${api_url}"
 
-  docker build -t "$tag" "$frontend_dir" \
+  if ! docker build -t "$tag" "$frontend_dir" \
     --build-arg "NEXT_PUBLIC_API_URL=${api_url}" \
     --build-arg "NEXT_PUBLIC_BUILD_ID=${build_id}" \
     --build-arg "NEXT_PUBLIC_KC_URL=${kc_url}" \
     --build-arg "NEXT_PUBLIC_KC_REALM=${kc_realm}" \
-    --build-arg "NEXT_PUBLIC_KC_CLIENT_ID=${kc_client}"
-
-  if grep -q '^FRONTEND_IMAGE=' "$env_file"; then
-    sed -i.bak "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${tag}|" "$env_file"
-  else
-    echo "FRONTEND_IMAGE=${tag}" >> "$env_file"
+    --build-arg "NEXT_PUBLIC_KC_CLIENT_ID=${kc_client}"; then
+    echo "ERROR: Frontend docker build failed." >&2
+    return 1
   fi
-  rm -f "${env_file}.bak"
 
-  export FRONTEND_IMAGE="$tag"
-  echo "Pinned FRONTEND_IMAGE=${tag} in ${env_file}"
+  frontend_install_pin_frontend_image "$env_file" "$tag"
 }
