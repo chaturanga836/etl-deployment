@@ -8,27 +8,48 @@ source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
 
 TAG="${FRONTEND_LOCAL_TAG:-dt-orch-frontend:install}"
 STATE_DIR="${STATE_DIR:-}"
+ENV_FILE_ARG=""
+PUBLIC_HOST=""
 
 usage() {
   cat <<'EOF'
-Usage: rebuild-frontend-from-source.sh
+Usage: rebuild-frontend-from-source.sh [OPTIONS]
 
 Builds elt-frontend using NEXT_PUBLIC_KC_URL / NEXT_PUBLIC_API_URL from installer
-.env (wizard renders the public host, e.g. http://13.200.160.10:8081).
+.env (wizard renders the public host, e.g. http://YOUR_IP:8081).
+
+Options:
+  --env-file PATH     Use this .env (installer state or rendered deploy env)
+  --public-host HOST  Public hostname/IP if .env is missing (e.g. 13.200.160.10)
+  -h, --help          Show help
 
 Updates FRONTEND_IMAGE and recreates dt-orch-frontend.
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env-file) ENV_FILE_ARG="$2"; shift 2 ;;
+    --public-host) PUBLIC_HOST="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+if [[ -n "$ENV_FILE_ARG" ]]; then
+  export ENV_FILE="$ENV_FILE_ARG"
 fi
 
 env_file="$(frontend_install_resolve_env_file "$ROOT_DIR" "$STATE_DIR")"
 if [[ -z "$env_file" ]]; then
-  echo "ERROR: No installer .env found. Complete the wizard install first." >&2
-  exit 1
+  echo "No installer .env found — trying running stack / EC2 metadata ..."
+  env_file="$(frontend_install_materialize_env_file "$ROOT_DIR" "$PUBLIC_HOST")" || {
+    echo "ERROR: Could not locate or synthesize .env." >&2
+    echo "Try: bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
+    echo "Or:  docker volume ls | grep installer" >&2
+    exit 1
+  }
+  echo "Using generated env: $env_file"
 fi
 
 frontend_install_build "$ROOT_DIR" "$env_file" "$TAG"
