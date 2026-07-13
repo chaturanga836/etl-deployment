@@ -100,11 +100,44 @@
       "type": "object",
       "required": ["admin_user", "admin_password", "realm"],
       "properties": {
+        "source": { "type": "string", "enum": ["bundled", "external"], "default": "bundled" },
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8081 },
         "admin_user": { "type": "string" },
         "admin_password": { "type": "string" },
         "realm": { "type": "string", "default": "workspace-realm" },
         "admin_client_id": { "type": "string", "default": "workspace-api" },
         "admin_client_secret": { "type": "string", "default": "changeme-api-secret" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["bundled", "external"], "default": "bundled" },
+        "host": { "type": "string", "default": "redis" },
+        "port": { "type": "integer", "default": 6379 },
+        "password": { "type": "string", "default": "" }
+      }
+    },
+    "minio": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["bundled", "external"], "default": "bundled" },
+        "host": { "type": "string" },
+        "port": { "type": "integer", "default": 9000 },
+        "access_key": { "type": "string" },
+        "secret_key": { "type": "string" },
+        "bucket": { "type": "string", "default": "data" }
+      }
+    },
+    "centrifugo": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["bundled", "external"], "default": "bundled" },
+        "host": { "type": "string", "default": "localhost" },
+        "http_port": { "type": "integer", "default": 8001 },
+        "api_key": { "type": "string" },
+        "token_hmac_secret_key": { "type": "string" }
       }
     },
     "app": {

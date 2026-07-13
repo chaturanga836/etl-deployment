@@ -39,6 +39,7 @@ import {
   type HostInfo,
   type InstallDefaults,
   type Prerequisites,
+  type ServiceSource,
   type UpgradeInfo,
   type WizardState,
 } from './api';
@@ -47,24 +48,32 @@ import InstallerBrand from './components/InstallerBrand';
 import { BRAND_NAME } from './constants/brand';
 import './App.css';
 
-const { Header, Content } = Layout;
+const { Header, Content, Sider } = Layout;
 const { Paragraph, Text, Link } = Typography;
 
 const MIN_USERNAME_LENGTH = 3;
 const MIN_PASSWORD_LENGTH = 8;
 
-/** Compact step labels — full titles are shown on each card. */
-const USER_STEP_LABELS = [
+/** User-visible step labels (matches internal step indices 0–12). */
+const STEP_LABELS = [
   'Welcome',
   'Type',
-  'Account',
   'Database',
+  'Keycloak',
+  'Redis',
+  'MinIO',
+  'Centrifugo',
+  'Account',
   'License',
   'Website',
   'Confirm',
   'Installing',
   'Done',
 ];
+
+const LAST_FORM_STEP = 10;
+const INSTALLING_STEP = 11;
+const DONE_STEP = 12;
 
 function isAccountStepValid(wizard: WizardState): boolean {
   return (
@@ -74,26 +83,76 @@ function isAccountStepValid(wizard: WizardState): boolean {
 }
 
 function isDatabaseStepValid(wizard: WizardState, dbValidated: boolean): boolean {
-  if (wizard.database.source === 'bundled') {
-    return true;
+  const { host, user } = wizard.database;
+  if (!host.trim() || !user.trim()) return false;
+  if (wizard.database.source === 'external') {
+    return Boolean(wizard.database.password) && dbValidated;
   }
-  const { host, user, password } = wizard.database;
-  return Boolean(host.trim() && user.trim() && password) && dbValidated;
+  return true;
+}
+
+function isKeycloakStepValid(wizard: WizardState): boolean {
+  const k = wizard.keycloak;
+  return Boolean(
+    k.host.trim()
+    && k.port
+    && k.admin_user.trim()
+    && k.admin_password
+    && k.realm.trim()
+    && k.admin_client_id.trim()
+    && k.admin_client_secret.trim(),
+  );
+}
+
+function isRedisStepValid(wizard: WizardState): boolean {
+  return Boolean(wizard.redis.host.trim() && wizard.redis.port);
+}
+
+function isMinioStepValid(wizard: WizardState): boolean {
+  const m = wizard.minio;
+  return Boolean(m.host.trim() && m.port && m.access_key.trim() && m.secret_key.trim() && m.bucket.trim());
+}
+
+function isCentrifugoStepValid(wizard: WizardState): boolean {
+  const c = wizard.centrifugo;
+  return Boolean(c.host.trim() && c.http_port && c.api_key.trim() && c.token_hmac_secret_key.trim());
 }
 
 function isWebsiteStepValid(wizard: WizardState): boolean {
   return wizard.monolith.public_host.trim().length > 0;
 }
 
-function userStepIndex(internal: number): number {
-  return internal <= 1 ? internal : internal - 1;
-}
-
-function skipPackagesStep(internal: number, delta: number): number {
-  let n = internal + delta;
-  if (delta > 0 && n === 2) n = 3;
-  if (delta < 0 && n === 2) n = 1;
-  return Math.max(0, Math.min(n, 9));
+function SourceRadios({
+  value,
+  onChange,
+  bundledLabel = 'Install for me',
+  bundledHint = 'Recommended for a new server.',
+  externalLabel = 'Use existing',
+}: {
+  value: ServiceSource;
+  onChange: (v: ServiceSource) => void;
+  bundledLabel?: string;
+  bundledHint?: string;
+  externalLabel?: string;
+}) {
+  return (
+    <Radio.Group
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ marginBottom: 16 }}
+    >
+      <Space direction="vertical">
+        <Radio value="bundled">
+          <Text strong>{bundledLabel}</Text>
+          <br />
+          <Text type="secondary">{bundledHint}</Text>
+        </Radio>
+        <Radio value="external">
+          <Text strong>{externalLabel}</Text>
+        </Radio>
+      </Space>
+    </Radio.Group>
+  );
 }
 
 export default function App() {
@@ -115,6 +174,10 @@ export default function App() {
   const [dbValidated, setDbValidated] = useState(false);
   const [accountTouched, setAccountTouched] = useState(false);
 
+  const update = (partial: Partial<WizardState>) => {
+    setWizard((w) => ({ ...w, ...partial }));
+  };
+
   const refreshPrereqs = useCallback(async () => {
     setPrereqsLoading(true);
     try {
@@ -129,7 +192,7 @@ export default function App() {
   const onComplete = useCallback((url: string) => {
     clearActiveJob();
     setLoginUrl(url);
-    setStep(9);
+    setStep(DONE_STEP);
     fetchUpgradeInfo().then(setUpgradeInfo).catch(() => {});
   }, []);
   const onError = useCallback((msg: string) => {
@@ -153,7 +216,7 @@ export default function App() {
   const resumeDeployJob = useCallback((snapshot: DeployJobSnapshot) => {
     setJobId(snapshot.job_id);
     setJobKind(snapshot.kind === 'upgrade' ? 'upgrade' : 'deploy');
-    setStep(8);
+    setStep(INSTALLING_STEP);
     setDeployError(snapshot.status === 'failed' ? snapshot.error || 'Installation failed' : '');
     persistActiveJob(snapshot.job_id, snapshot.kind);
   }, []);
@@ -180,6 +243,18 @@ export default function App() {
               ? info.suggested_public_host
               : w.monolith.public_host,
           },
+          keycloak: {
+            ...w.keycloak,
+            host: w.keycloak.host === 'localhost'
+              ? info.suggested_public_host
+              : w.keycloak.host,
+          },
+          centrifugo: {
+            ...w.centrifugo,
+            host: w.centrifugo.host === 'localhost'
+              ? info.suggested_public_host
+              : w.centrifugo.host,
+          },
           kubernetes: {
             ...w.kubernetes,
             ingress_host: w.kubernetes.ingress_host === 'studio.example.com'
@@ -193,74 +268,73 @@ export default function App() {
       if (installState.installed) {
         setAlreadyInstalled(installState);
         setLoginUrl(installState.login_url || '');
-        setStep(9);
+        setStep(DONE_STEP);
         return;
       }
 
       const upgradeInfoResult = await fetchUpgradeInfo().catch(() => null);
-      if (upgradeInfoResult) {
-        setUpgradeInfo(upgradeInfoResult);
-        if (upgradeInfoResult.installed && upgradeInfoResult.login_url) {
-          setLoginUrl(upgradeInfoResult.login_url);
-          setAlreadyInstalled((prev) => prev ?? { login_url: upgradeInfoResult.login_url ?? undefined });
-          setStep(9);
-          return;
-        }
-      }
-
-      const active = await fetchActiveDeployJob();
-      if (active) {
-        resumeDeployJob(active);
-        return;
-      }
+      if (upgradeInfoResult) setUpgradeInfo(upgradeInfoResult);
 
       const storedJobId = sessionStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
-      if (!storedJobId) {
-        return;
-      }
-
-      try {
-        const status = await fetchDeployStatus(storedJobId);
-        if (status.status === 'pending' || status.status === 'running' || status.status === 'failed') {
-          resumeDeployJob(status);
-        } else {
+      if (storedJobId) {
+        try {
+          const status = await fetchDeployStatus(storedJobId);
+          if (status.status === 'running' || status.status === 'pending') {
+            resumeDeployJob(status);
+            return;
+          }
+          if (status.status === 'succeeded' && status.login_url) {
+            clearActiveJob();
+            setLoginUrl(status.login_url);
+            setStep(DONE_STEP);
+            return;
+          }
+          clearActiveJob();
+        } catch {
           clearActiveJob();
         }
-      } catch {
-        clearActiveJob();
+      }
+
+      const active = await fetchActiveDeployJob().catch(() => null);
+      if (active && (active.status === 'running' || active.status === 'pending')) {
+        resumeDeployJob(active);
       }
     };
-
     void load();
   }, [resumeDeployJob]);
 
-  const update = (patch: Partial<WizardState>) => setWizard((w) => ({ ...w, ...patch }));
-
   const next = async () => {
-    if (step === 3) {
-      setAccountTouched(true);
-      if (!isAccountStepValid(wizard)) {
-        message.warning(
-          `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
-        );
-        return;
+    if (step === 2 && !isDatabaseStepValid(wizard, dbValidated)) {
+      if (wizard.database.source === 'external') {
+        message.warning('Fill in database connection details and click Test connection before continuing.');
+      } else {
+        message.warning('Enter database host, port, and username before continuing.');
       }
+      return;
     }
-    if (step === 4) {
-      if (!isDatabaseStepValid(wizard, dbValidated)) {
-        if (wizard.database.source === 'external') {
-          message.warning('Fill in database connection details and click Test connection before continuing.');
-        }
-        return;
-      }
+    if (step === 3 && !isKeycloakStepValid(wizard)) {
+      message.warning('Fill in all Keycloak fields before continuing.');
+      return;
     }
-    if (step === 6 && wizard.deployment_mode === 'monolith') {
-      if (!isWebsiteStepValid(wizard)) {
-        message.warning('Enter the website address people will use to open DT Orch.');
-        return;
-      }
+    if (step === 4 && !isRedisStepValid(wizard)) {
+      message.warning('Enter Redis host and port before continuing.');
+      return;
     }
-    if (step === 5 && licenseMode === 'trial') {
+    if (step === 5 && !isMinioStepValid(wizard)) {
+      message.warning('Fill in all MinIO fields before continuing.');
+      return;
+    }
+    if (step === 6 && !isCentrifugoStepValid(wizard)) {
+      message.warning('Fill in all Centrifugo fields before continuing.');
+      return;
+    }
+    if (step === 7 && !isAccountStepValid(wizard)) {
+      message.warning(
+        `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
+      );
+      return;
+    }
+    if (step === 8 && licenseMode === 'trial') {
       try {
         const trial = await requestTrialLicense();
         update({ license_key: trial.license_key });
@@ -270,18 +344,32 @@ export default function App() {
         return;
       }
     }
-    if (step === 8) return;
-    setStep((s) => skipPackagesStep(s, 1));
+    if (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
+      message.warning('Enter the website address people will use to open DT Orch.');
+      return;
+    }
+    if (step === INSTALLING_STEP) return;
+    setStep((s) => Math.min(s + 1, DONE_STEP));
   };
 
   const nextDisabled = (
-    (step === 3 && !isAccountStepValid(wizard))
-    || (step === 4 && !isDatabaseStepValid(wizard, dbValidated))
-    || (step === 5 && licenseMode === 'license' && !licenseValidated)
-    || (step === 6 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
+    (step === 2 && !isDatabaseStepValid(wizard, dbValidated))
+    || (step === 3 && !isKeycloakStepValid(wizard))
+    || (step === 4 && !isRedisStepValid(wizard))
+    || (step === 5 && !isMinioStepValid(wizard))
+    || (step === 6 && !isCentrifugoStepValid(wizard))
+    || (step === 7 && !isAccountStepValid(wizard))
+    || (step === 8 && licenseMode === 'license' && !licenseValidated)
+    || (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
   );
 
-  const back = () => setStep((s) => skipPackagesStep(s, -1));
+  const back = () => setStep((s) => Math.max(0, s - 1));
+
+  const goToStep = (index: number) => {
+    if (index < 0 || index > step) return;
+    if (step >= INSTALLING_STEP && index < INSTALLING_STEP) return;
+    setStep(index);
+  };
 
   const runDeploy = async () => {
     setDeployError('');
@@ -290,7 +378,7 @@ export default function App() {
       const id = await startDeploy(wizard);
       persistActiveJob(id, 'deploy');
       setJobId(id);
-      setStep(8);
+      setStep(INSTALLING_STEP);
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Install failed');
     }
@@ -303,7 +391,7 @@ export default function App() {
       const id = await startUpgrade();
       persistActiveJob(id, 'upgrade');
       setJobId(id);
-      setStep(8);
+      setStep(INSTALLING_STEP);
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Upgrade failed');
     }
@@ -366,60 +454,24 @@ export default function App() {
                 description={
                   <Space direction="vertical" size="small">
                     {prereqs.registry.public && prereqs.registry.error === 'denied' && (
-                      <>
-                        <Text>
-                          DT Orch release images should be publicly downloadable — you do{' '}
-                          <Text strong>not</Text> need the vendor&apos;s GitHub account or token.
-                          Images are still protected inside the container (compiled binaries, not source code).
-                        </Text>
-                        <Text>
-                          This server was denied access — the vendor must publish packages as{' '}
-                          <Text strong>public</Text> on GitHub Container Registry. Contact support if you
-                          just received this installer.
-                        </Text>
-                      </>
+                      <Text>
+                        DT Orch release images should be publicly downloadable. Contact support if
+                        packages are still private on GitHub Container Registry.
+                      </Text>
                     )}
                     {prereqs.registry.public && prereqs.registry.error === 'not_found' && (
-                      <Space direction="vertical" size="small">
-                        <Text>
-                          One or more release images were not found. The vendor may not have published
-                          this version yet.
-                        </Text>
-                        {prereqs.registry.images && (
-                          <ul style={{ margin: 0, paddingLeft: 20 }}>
-                            {Object.entries(prereqs.registry.images).map(([name, info]) => (
-                              <li key={name}>
-                                <Text code>{info.image}</Text>
-                                {' — '}
-                                {info.accessible ? 'OK' : info.error ?? 'missing'}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </Space>
+                      <Text>One or more release images were not found for this version.</Text>
                     )}
                     {prereqs.registry.public && prereqs.registry.error === 'unreachable' && (
                       <Text>
-                        Cannot reach <Text code>{prereqs.registry.url}</Text>. Check outbound HTTPS and
-                        firewall rules, or use an offline install bundle if your environment has no internet.
+                        Cannot reach <Text code>{prereqs.registry.url}</Text>. Check outbound HTTPS.
                       </Text>
                     )}
                     {!prereqs.registry.public && (
-                      <>
-                        <Text>
-                          Images are in a private registry. Use <Text strong>your own</Text> GitHub account
-                          after your vendor grants you package read access — not the vendor&apos;s token.
-                        </Text>
-                        <Text>
-                          On the server where you ran <Text code>setup-ui.sh</Text>, open SSH and run:
-                        </Text>
-                        <Text code>
-                          echo &quot;&lt;YOUR_GITHUB_PAT&gt;&quot; | docker login ghcr.io -u &lt;your-github-user&gt; --password-stdin
-                        </Text>
-                        <Text type="secondary">
-                          Your PAT needs <Text code>read:packages</Text>.
-                        </Text>
-                      </>
+                      <Text>
+                        Private registry — log in on the host with a GitHub PAT that has{' '}
+                        <Text code>read:packages</Text>.
+                      </Text>
                     )}
                     <Text type="secondary">Image: <Text code>{prereqs.registry.api_image}</Text></Text>
                     <Button loading={prereqsLoading} onClick={refreshPrereqs}>
@@ -452,20 +504,6 @@ export default function App() {
                     <Space direction="vertical">
                       <Text>Docker: {prereqs.docker.available ? prereqs.docker.version : 'Not found'}</Text>
                       <Text>Compose: {prereqs.compose.available ? prereqs.compose.version : 'Not found'}</Text>
-                      {prereqs.registry && (
-                        <Text>
-                          Registry ({prereqs.registry.url}):{' '}
-                          {prereqs.registry.local_build
-                            ? 'local build'
-                            : prereqs.registry.accessible === true
-                              ? 'reachable'
-                              : prereqs.registry.accessible === false
-                                ? prereqs.registry.public
-                                  ? `unavailable (${prereqs.registry.error ?? 'error'})`
-                                  : 'denied — your GitHub login required'
-                                : 'not checked'}
-                        </Text>
-                      )}
                     </Space>
                   ),
                 }]}
@@ -500,25 +538,292 @@ export default function App() {
             </Radio.Group>
           </Card>
         );
+      case 2:
+        return (
+          <Card title="Database">
+            <SourceRadios
+              value={wizard.database.source}
+              onChange={(source) => {
+                setDbValidated(false);
+                update({
+                  database: {
+                    ...wizard.database,
+                    source,
+                    host: source === 'bundled' ? (wizard.database.host || 'postgres') : wizard.database.host,
+                  },
+                });
+              }}
+              bundledLabel="Install database for me"
+              externalLabel="Use my existing database"
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.database.host}
+                  onChange={(e) => {
+                    setDbValidated(false);
+                    update({ database: { ...wizard.database, host: e.target.value } });
+                  }}
+                  placeholder={wizard.database.source === 'bundled' ? 'postgres' : 'db.example.com'}
+                />
+              </Form.Item>
+              <Form.Item label="Port" required>
+                <InputNumber
+                  value={wizard.database.port}
+                  onChange={(v) => {
+                    setDbValidated(false);
+                    update({ database: { ...wizard.database, port: v || 5432 } });
+                  }}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item label="Username" required>
+                <Input
+                  value={wizard.database.user}
+                  onChange={(e) => {
+                    setDbValidated(false);
+                    update({ database: { ...wizard.database, user: e.target.value } });
+                  }}
+                />
+              </Form.Item>
+              <Form.Item
+                label="Password"
+                required={wizard.database.source === 'external'}
+                extra={wizard.database.source === 'bundled' ? 'Leave blank to use the default (changeme).' : undefined}
+              >
+                <Input.Password
+                  value={wizard.database.password}
+                  onChange={(e) => {
+                    setDbValidated(false);
+                    update({ database: { ...wizard.database, password: e.target.value } });
+                  }}
+                />
+              </Form.Item>
+              <Form.Item label="Metadata database">
+                <Input
+                  value={wizard.database.metadata_db_name}
+                  onChange={(e) => update({ database: { ...wizard.database, metadata_db_name: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Workspace database">
+                <Input
+                  value={wizard.database.workspace_db_name}
+                  onChange={(e) => update({ database: { ...wizard.database, workspace_db_name: e.target.value } })}
+                />
+              </Form.Item>
+              {wizard.database.source === 'external' && (
+                <>
+                  <Space>
+                    <Button type="primary" onClick={testDb}>Test connection</Button>
+                    {dbValidated && <Text type="success">Connection verified</Text>}
+                  </Space>
+                  {!dbValidated && (
+                    <Paragraph type="secondary" style={{ marginTop: 12 }}>
+                      Test the connection before continuing.
+                    </Paragraph>
+                  )}
+                </>
+              )}
+            </Form>
+          </Card>
+        );
       case 3:
+        return (
+          <Card title="Keycloak">
+            <Paragraph type="secondary">
+              Auto-filled for a bundled install. Change host, port, or credentials if needed.
+            </Paragraph>
+            <SourceRadios
+              value={wizard.keycloak.source}
+              onChange={(source) => update({ keycloak: { ...wizard.keycloak, source } })}
+              bundledLabel="Install Keycloak for me"
+              externalLabel="Use existing Keycloak"
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.keycloak.host}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, host: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Port" required>
+                <InputNumber
+                  value={wizard.keycloak.port}
+                  onChange={(v) => update({ keycloak: { ...wizard.keycloak, port: v || 8081 } })}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item label="Admin username" required>
+                <Input
+                  value={wizard.keycloak.admin_user}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, admin_user: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Admin password" required>
+                <Input.Password
+                  value={wizard.keycloak.admin_password}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, admin_password: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Realm" required>
+                <Input
+                  value={wizard.keycloak.realm}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, realm: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="API client ID" required>
+                <Input
+                  value={wizard.keycloak.admin_client_id}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, admin_client_id: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="API client secret" required>
+                <Input.Password
+                  value={wizard.keycloak.admin_client_secret}
+                  onChange={(e) => update({ keycloak: { ...wizard.keycloak, admin_client_secret: e.target.value } })}
+                />
+              </Form.Item>
+            </Form>
+          </Card>
+        );
+      case 4:
+        return (
+          <Card title="Redis">
+            <Paragraph type="secondary">
+              Used for Celery task queues. Defaults match the bundled Redis container.
+            </Paragraph>
+            <SourceRadios
+              value={wizard.redis.source}
+              onChange={(source) => update({
+                redis: {
+                  ...wizard.redis,
+                  source,
+                  host: source === 'bundled' ? (wizard.redis.host || 'redis') : wizard.redis.host,
+                },
+              })}
+              bundledLabel="Install Redis for me"
+              externalLabel="Use existing Redis"
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.redis.host}
+                  onChange={(e) => update({ redis: { ...wizard.redis, host: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Port" required>
+                <InputNumber
+                  value={wizard.redis.port}
+                  onChange={(v) => update({ redis: { ...wizard.redis, port: v || 6379 } })}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item label="Password (optional)">
+                <Input.Password
+                  value={wizard.redis.password}
+                  onChange={(e) => update({ redis: { ...wizard.redis, password: e.target.value } })}
+                />
+              </Form.Item>
+            </Form>
+          </Card>
+        );
+      case 5:
+        return (
+          <Card title="MinIO (object storage)">
+            <Paragraph type="secondary">
+              Shared storage defaults written to the install environment for first provisioning.
+            </Paragraph>
+            <SourceRadios
+              value={wizard.minio.source}
+              onChange={(source) => update({ minio: { ...wizard.minio, source } })}
+              bundledLabel="Provision shared MinIO for me"
+              externalLabel="Use existing MinIO / S3"
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.minio.host}
+                  onChange={(e) => update({ minio: { ...wizard.minio, host: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Port" required>
+                <InputNumber
+                  value={wizard.minio.port}
+                  onChange={(v) => update({ minio: { ...wizard.minio, port: v || 9000 } })}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item label="Access key" required>
+                <Input
+                  value={wizard.minio.access_key}
+                  onChange={(e) => update({ minio: { ...wizard.minio, access_key: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Secret key" required>
+                <Input.Password
+                  value={wizard.minio.secret_key}
+                  onChange={(e) => update({ minio: { ...wizard.minio, secret_key: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Bucket" required>
+                <Input
+                  value={wizard.minio.bucket}
+                  onChange={(e) => update({ minio: { ...wizard.minio, bucket: e.target.value } })}
+                />
+              </Form.Item>
+            </Form>
+          </Card>
+        );
+      case 6:
+        return (
+          <Card title="Centrifugo (realtime notifications)">
+            <Paragraph type="secondary">
+              Defaults used when the first organization enables realtime notifications.
+            </Paragraph>
+            <SourceRadios
+              value={wizard.centrifugo.source}
+              onChange={(source) => update({ centrifugo: { ...wizard.centrifugo, source } })}
+              bundledLabel="Use platform defaults"
+              externalLabel="Use existing Centrifugo"
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.centrifugo.host}
+                  onChange={(e) => update({ centrifugo: { ...wizard.centrifugo, host: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="HTTP port" required>
+                <InputNumber
+                  value={wizard.centrifugo.http_port}
+                  onChange={(v) => update({ centrifugo: { ...wizard.centrifugo, http_port: v || 8001 } })}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Form.Item label="API key" required>
+                <Input.Password
+                  value={wizard.centrifugo.api_key}
+                  onChange={(e) => update({ centrifugo: { ...wizard.centrifugo, api_key: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item label="Token HMAC secret" required>
+                <Input.Password
+                  value={wizard.centrifugo.token_hmac_secret_key}
+                  onChange={(e) => update({
+                    centrifugo: { ...wizard.centrifugo, token_hmac_secret_key: e.target.value },
+                  })}
+                />
+              </Form.Item>
+            </Form>
+          </Card>
+        );
+      case 7:
         return (
           <Card title="Your administrator account">
             <Paragraph type="secondary">
               You will use this to sign in after installation.
             </Paragraph>
-            <Form
-              layout="vertical"
-              onFinish={() => {
-                setAccountTouched(true);
-                if (!isAccountStepValid(wizard)) {
-                  message.warning(
-                    `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
-                  );
-                  return;
-                }
-                void next();
-              }}
-            >
+            <Form layout="vertical">
               <Form.Item
                 label="Username"
                 required
@@ -571,81 +876,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 4:
-        return (
-          <Card title="Database">
-            <Radio.Group
-              value={wizard.database.source}
-              onChange={(e) => {
-                setDbValidated(false);
-                update({ database: { ...wizard.database, source: e.target.value } });
-              }}
-              style={{ marginBottom: 16 }}
-            >
-              <Space direction="vertical">
-                <Radio value="bundled">
-                  <Text strong>Install database for me</Text>
-                  <br />
-                  <Text type="secondary">Recommended for a new server.</Text>
-                </Radio>
-                <Radio value="external">
-                  <Text strong>Use my existing database</Text>
-                </Radio>
-              </Space>
-            </Radio.Group>
-            {wizard.database.source === 'external' && (
-              <Form layout="vertical">
-                <Form.Item label="Host" required>
-                  <Input
-                    value={wizard.database.host}
-                    onChange={(e) => {
-                      setDbValidated(false);
-                      update({ database: { ...wizard.database, host: e.target.value } });
-                    }}
-                  />
-                </Form.Item>
-                <Form.Item label="Port" required>
-                  <InputNumber
-                    value={wizard.database.port}
-                    onChange={(v) => {
-                      setDbValidated(false);
-                      update({ database: { ...wizard.database, port: v || 5432 } });
-                    }}
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-                <Form.Item label="Username" required>
-                  <Input
-                    value={wizard.database.user}
-                    onChange={(e) => {
-                      setDbValidated(false);
-                      update({ database: { ...wizard.database, user: e.target.value } });
-                    }}
-                  />
-                </Form.Item>
-                <Form.Item label="Password" required>
-                  <Input.Password
-                    value={wizard.database.password}
-                    onChange={(e) => {
-                      setDbValidated(false);
-                      update({ database: { ...wizard.database, password: e.target.value } });
-                    }}
-                  />
-                </Form.Item>
-                <Space>
-                  <Button type="primary" onClick={testDb}>Test connection</Button>
-                  {dbValidated && <Text type="success">Connection verified</Text>}
-                </Space>
-                {!dbValidated && (
-                  <Paragraph type="secondary" style={{ marginTop: 12 }}>
-                    Test the connection before continuing.
-                  </Paragraph>
-                )}
-              </Form>
-            )}
-          </Card>
-        );
-      case 5:
+      case 8:
         return (
           <Card title="License">
             <Radio.Group
@@ -711,11 +942,6 @@ export default function App() {
                     <Text type="success">{licenseInfo}</Text>
                   )}
                 </Space>
-                {!licenseValidated && (
-                  <Paragraph type="secondary" style={{ marginTop: 12 }}>
-                    Validate your license before continuing.
-                  </Paragraph>
-                )}
               </Form>
             )}
             {licenseMode === 'trial' && (
@@ -728,7 +954,7 @@ export default function App() {
             )}
           </Card>
         );
-      case 6:
+      case 9:
         if (wizard.deployment_mode === 'monolith') {
           return (
             <Card title="Your website address">
@@ -743,46 +969,23 @@ export default function App() {
                     placeholder="13.200.160.10"
                   />
                 </Form.Item>
-              </Form>
-            </Card>
-          );
-        }
-        if (wizard.deployment_mode === 'kubernetes') {
-          return (
-            <Card title="Kubernetes settings">
-              <Form layout="vertical">
-                <Form.Item label="Namespace">
-                  <Input value={wizard.kubernetes.namespace} onChange={(e) => update({ kubernetes: { ...wizard.kubernetes, namespace: e.target.value } })} />
-                </Form.Item>
-                <Form.Item label="Ingress host" required>
-                  <Input value={wizard.kubernetes.ingress_host} onChange={(e) => update({ kubernetes: { ...wizard.kubernetes, ingress_host: e.target.value } })} />
+                <Form.Item label="HTTP port">
+                  <InputNumber
+                    value={wizard.monolith.http_port}
+                    onChange={(v) => update({ monolith: { ...wizard.monolith, http_port: v || 80 } })}
+                    style={{ width: '100%' }}
+                  />
                 </Form.Item>
               </Form>
             </Card>
           );
         }
         return (
-          <Card title="Server addresses">
-            <Form layout="vertical">
-              {Object.entries(wizard.distributed.services).map(([name, svc]) => (
-                <Form.Item key={name} label={name}>
-                  <Input
-                    value={svc.host}
-                    onChange={(e) => update({
-                      distributed: {
-                        services: {
-                          ...wizard.distributed.services,
-                          [name]: { ...svc, host: e.target.value },
-                        },
-                      },
-                    })}
-                  />
-                </Form.Item>
-              ))}
-            </Form>
+          <Card title="Website / ingress">
+            <Paragraph type="secondary">Complete website settings for this install mode.</Paragraph>
           </Card>
         );
-      case 7:
+      case 10:
         return (
           <Card title="Ready to install">
             <Descriptions bordered column={1} size="middle">
@@ -791,7 +994,21 @@ export default function App() {
               <Descriptions.Item label="Install type">Single server</Descriptions.Item>
               <Descriptions.Item label="Administrator">{wizard.superadmin_username || '—'}</Descriptions.Item>
               <Descriptions.Item label="Database">
-                {wizard.database.source === 'bundled' ? 'Included with install' : 'Your existing database'}
+                {wizard.database.source === 'bundled' ? 'Included' : 'External'}
+                {' — '}
+                {wizard.database.host}:{wizard.database.port}
+              </Descriptions.Item>
+              <Descriptions.Item label="Keycloak">
+                {wizard.keycloak.host}:{wizard.keycloak.port} ({wizard.keycloak.realm})
+              </Descriptions.Item>
+              <Descriptions.Item label="Redis">
+                {wizard.redis.host}:{wizard.redis.port}
+              </Descriptions.Item>
+              <Descriptions.Item label="MinIO">
+                {wizard.minio.host}:{wizard.minio.port}/{wizard.minio.bucket}
+              </Descriptions.Item>
+              <Descriptions.Item label="Centrifugo">
+                {wizard.centrifugo.host}:{wizard.centrifugo.http_port}
               </Descriptions.Item>
               <Descriptions.Item label="License">
                 {licenseMode === 'trial' || !wizard.license_key
@@ -809,7 +1026,7 @@ export default function App() {
             </Button>
           </Card>
         );
-      case 8:
+      case 11:
         return (
           <Card title={jobKind === 'upgrade' ? 'Upgrading…' : 'Installing…'}>
             <Paragraph>
@@ -847,7 +1064,7 @@ export default function App() {
             </div>
           </Card>
         );
-      case 9:
+      case 12:
         return (
           <>
             <Result
@@ -878,21 +1095,10 @@ export default function App() {
                   {' → '}
                   Available: <Text code>{upgradeInfo.available_tag}</Text>
                 </Paragraph>
-                <Paragraph type="secondary">
-                  Upgrades pull new release images and restart platform services. Your database and settings are kept.
-                </Paragraph>
                 <Button type="primary" size="large" onClick={runUpgrade}>
                   Upgrade to {upgradeInfo.available_tag}
                 </Button>
               </Card>
-            )}
-            {upgradeInfo?.installed && !upgradeInfo.upgrade_available && upgradeInfo.current_tag && (
-              <Alert
-                type="success"
-                showIcon
-                style={{ marginTop: 16 }}
-                message={`DT Orch is up to date (${upgradeInfo.current_tag})`}
-              />
             )}
           </>
         );
@@ -906,26 +1112,39 @@ export default function App() {
       <Header className="installer-header">
         <InstallerBrand variant="header" />
       </Header>
-      <Content className="installer-content">
-        <div className="installer-steps">
+      <Layout className="installer-body">
+        <Sider width={220} className="installer-sider" breakpoint="lg" collapsedWidth={0}>
           <Steps
-            current={userStepIndex(step)}
-            items={USER_STEP_LABELS.map((t) => ({ title: t }))}
+            direction="vertical"
             size="small"
-            labelPlacement="vertical"
+            current={Math.min(step, DONE_STEP)}
+            onChange={goToStep}
+            items={STEP_LABELS.map((title, index) => ({
+              title,
+              disabled: index > step || (step >= INSTALLING_STEP && index < INSTALLING_STEP),
+            }))}
           />
-        </div>
-        {renderStep()}
-        {step > 0 && step < 8 && step !== 7 && (
-          <Space style={{ marginTop: 16 }}>
-            <Button onClick={back}>Back</Button>
-            <Button type="primary" onClick={next} disabled={nextDisabled}>Next</Button>
-          </Space>
-        )}
-        {step === 0 && (
-          <Button type="primary" onClick={next} style={{ marginTop: 16 }} size="large">Get started</Button>
-        )}
-      </Content>
+        </Sider>
+        <Content className="installer-main">
+          {renderStep()}
+          {step > 0 && step < LAST_FORM_STEP && (
+            <Space style={{ marginTop: 16 }}>
+              <Button onClick={back}>Back</Button>
+              <Button type="primary" onClick={() => void next()} disabled={nextDisabled}>Next</Button>
+            </Space>
+          )}
+          {step === LAST_FORM_STEP && (
+            <Space style={{ marginTop: 16 }}>
+              <Button onClick={back}>Back</Button>
+            </Space>
+          )}
+          {step === 0 && (
+            <Button type="primary" onClick={() => void next()} style={{ marginTop: 16 }} size="large">
+              Get started
+            </Button>
+          )}
+        </Content>
+      </Layout>
     </Layout>
   );
 }

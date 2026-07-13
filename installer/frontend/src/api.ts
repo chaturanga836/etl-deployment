@@ -50,6 +50,8 @@ export type TrialLicense = {
   trial_days: number;
 };
 
+export type ServiceSource = 'bundled' | 'external';
+
 export type WizardState = {
   deployment_mode: 'monolith' | 'distributed' | 'kubernetes';
   registry_url: string;
@@ -60,7 +62,7 @@ export type WizardState = {
   superadmin_email: string;
   license_key: string;
   database: {
-    source: 'bundled' | 'external';
+    source: ServiceSource;
     host: string;
     port: number;
     user: string;
@@ -68,6 +70,37 @@ export type WizardState = {
     metadata_db_name: string;
     workspace_db_name: string;
     keycloak_db_name: string;
+  };
+  keycloak: {
+    source: ServiceSource;
+    host: string;
+    port: number;
+    admin_user: string;
+    admin_password: string;
+    realm: string;
+    admin_client_id: string;
+    admin_client_secret: string;
+  };
+  redis: {
+    source: ServiceSource;
+    host: string;
+    port: number;
+    password: string;
+  };
+  minio: {
+    source: ServiceSource;
+    host: string;
+    port: number;
+    access_key: string;
+    secret_key: string;
+    bucket: string;
+  };
+  centrifugo: {
+    source: ServiceSource;
+    host: string;
+    http_port: number;
+    api_key: string;
+    token_hmac_secret_key: string;
   };
   monolith: {
     public_host: string;
@@ -89,6 +122,16 @@ export type WizardState = {
   };
 };
 
+function randomSecret(bytes = 16): string {
+  const arr = new Uint8Array(bytes);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < arr.length; i += 1) arr[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export const defaultWizard: WizardState = {
   deployment_mode: 'monolith',
   registry_url: 'ghcr.io/chaturanga836',
@@ -100,13 +143,44 @@ export const defaultWizard: WizardState = {
   license_key: '',
   database: {
     source: 'bundled',
-    host: '',
+    host: 'postgres',
     port: 5432,
     user: 'elt',
     password: '',
     metadata_db_name: 'dtorc_metadata',
     workspace_db_name: 'dtorc_workspace',
     keycloak_db_name: 'keycloak',
+  },
+  keycloak: {
+    source: 'bundled',
+    host: 'localhost',
+    port: 8081,
+    admin_user: 'admin',
+    admin_password: 'changeme',
+    realm: 'workspace-realm',
+    admin_client_id: 'workspace-api',
+    admin_client_secret: 'changeme-api-secret',
+  },
+  redis: {
+    source: 'bundled',
+    host: 'redis',
+    port: 6379,
+    password: '',
+  },
+  minio: {
+    source: 'bundled',
+    host: 'platform-shared-minio-storage',
+    port: 9000,
+    access_key: `minio${randomSecret(4)}`,
+    secret_key: randomSecret(24),
+    bucket: 'data',
+  },
+  centrifugo: {
+    source: 'bundled',
+    host: 'localhost',
+    http_port: 8001,
+    api_key: randomSecret(24),
+    token_hmac_secret_key: randomSecret(32),
   },
   monolith: {
     public_host: 'localhost',
@@ -204,6 +278,13 @@ export async function startDeploy(wizard: WizardState): Promise<string> {
       superadmin_email: wizard.superadmin_email || undefined,
       license_key: wizard.license_key,
       database: wizard.database,
+      keycloak: wizard.keycloak,
+      redis: wizard.redis,
+      minio: wizard.minio,
+      centrifugo: wizard.centrifugo,
+      kc_admin_user: wizard.keycloak.admin_user,
+      kc_admin_password: wizard.keycloak.admin_password,
+      kc_realm: wizard.keycloak.realm,
       monolith: wizard.monolith,
       distributed: wizard.distributed,
       kubernetes: wizard.kubernetes,

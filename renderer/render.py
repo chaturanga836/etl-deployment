@@ -43,11 +43,11 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str, str, str]:
     workspace_db = db.get("workspace_db_name", "dtorc_workspace")
 
     if db["source"] == "bundled":
-        host = "postgres"
-        port = 5432
+        host = (db.get("host") or "").strip() or "postgres"
+        port = int(db.get("port") or 5432)
     else:
         host = db["host"]
-        port = db.get("port", 5432)
+        port = int(db.get("port", 5432))
 
     base = f"postgresql://{user}:{password}@{host}:{port}"
     return (
@@ -76,12 +76,57 @@ def _registry_lines(config: dict[str, Any]) -> list[str]:
 
 
 def _redis_url(config: dict[str, Any]) -> str:
+    redis_cfg = config.get("redis") or {}
+    if redis_cfg:
+        host = (redis_cfg.get("host") or "").strip() or "redis"
+        port = int(redis_cfg.get("port") or 6379)
+        password = (redis_cfg.get("password") or "").strip()
+        if password:
+            return f"redis://:{quote_plus(password)}@{host}:{port}/0"
+        return f"redis://{host}:{port}/0"
+
     if config["mode"] != "distributed":
         return "redis://redis:6379/0"
-    redis_cfg = config.get("distributed", {}).get("services", {}).get("redis", {})
-    host = redis_cfg.get("host", "redis")
-    port = redis_cfg.get("port", 6379)
+    dist_redis = config.get("distributed", {}).get("services", {}).get("redis", {})
+    host = dist_redis.get("host", "redis")
+    port = dist_redis.get("port", 6379)
     return f"redis://{host}:{port}/0"
+
+
+def _minio_env_lines(config: dict[str, Any]) -> list[str]:
+    minio = config.get("minio") or {}
+    if not minio:
+        return []
+    host = (minio.get("host") or "").strip() or "platform-shared-minio-storage"
+    port = int(minio.get("port") or 9000)
+    endpoint = f"http://{host}:{port}"
+    return [
+        f"SHARED_MINIO_ENDPOINT={endpoint}",
+        _env_line("SHARED_MINIO_ACCESS_KEY", minio.get("access_key", "")),
+        _env_line("SHARED_MINIO_SECRET_KEY", minio.get("secret_key", "")),
+        f"SHARED_STORAGE_BUCKET={minio.get('bucket') or 'data'}",
+        "",
+    ]
+
+
+def _centrifugo_env_lines(config: dict[str, Any]) -> list[str]:
+    cf = config.get("centrifugo") or {}
+    if not cf:
+        return []
+    host = (cf.get("host") or "").strip() or "localhost"
+    port = int(cf.get("http_port") or 8001)
+    api_url = f"http://{host}:{port}"
+    ws_url = f"ws://{host}:{port}/connection/websocket"
+    lines = [
+        f"CENTRIFUGO_DEFAULT_API_URL={api_url}",
+        f"CENTRIFUGO_DEFAULT_WS_URL={ws_url}",
+    ]
+    if cf.get("api_key"):
+        lines.append(_env_line("CENTRIFUGO_DEFAULT_API_KEY", cf["api_key"]))
+    if cf.get("token_hmac_secret_key"):
+        lines.append(_env_line("CENTRIFUGO_DEFAULT_TOKEN_HMAC_SECRET_KEY", cf["token_hmac_secret_key"]))
+    lines.append("")
+    return lines
 
 
 def _platform_infra_url(config: dict[str, Any]) -> str:
@@ -198,24 +243,37 @@ def render_env(config: dict[str, Any]) -> str:
     ])
 
     if mode == "monolith":
-        keycloak_port = config["monolith"].get("ports", {}).get("keycloak", 8081)
+        keycloak_port = int(
+            kc.get("port")
+            or config["monolith"].get("ports", {}).get("keycloak", 8081)
+        )
         host = config["monolith"].get("public_host", "localhost")
         use_proxy = config["monolith"].get("use_proxy", True)
         http_port = config["monolith"].get("ports", {}).get("http", 80)
         app_url = _public_base_url(host, http_port, use_proxy)
         kc_public = app_url if use_proxy else f"http://{host}:{keycloak_port}"
+        kc_source = kc.get("source", "bundled")
+        if kc_source == "external":
+            kc_internal_host = (kc.get("host") or "").strip() or host
+            kc_server_url = f"http://{kc_internal_host}:{keycloak_port}"
+            kc_token_url = f"{kc_server_url}/realms/{realm}/protocol/openid-connect/token"
+            kc_bootstrap = kc_server_url
+        else:
+            kc_server_url = "http://keycloak:8080"
+            kc_token_url = f"http://keycloak:8080/realms/{realm}/protocol/openid-connect/token"
+            kc_bootstrap = f"http://localhost:{keycloak_port}"
         lines.extend([
             f"KEYCLOAK_PORT={keycloak_port}",
             f"KC_ADMIN_USER={kc['admin_user']}",
             _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
-            f"KC_BOOTSTRAP_URL=http://localhost:{keycloak_port}",
-            "KC_SERVER_URL=http://keycloak:8080",
+            f"KC_BOOTSTRAP_URL={kc_bootstrap}",
+            f"KC_SERVER_URL={kc_server_url}",
             f"KC_PUBLIC_URL={kc_public}",
             f"KC_ISSUER={kc_public}/realms/{realm}",
             f"KC_JWKS_URL={kc_public}/realms/{realm}/protocol/openid-connect/certs",
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
-            f"KEYCLOAK_TOKEN_URL=http://keycloak:8080/realms/{realm}/protocol/openid-connect/token",
+            f"KEYCLOAK_TOKEN_URL={kc_token_url}",
             f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
             f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
             f"KC_API_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
@@ -235,6 +293,9 @@ def render_env(config: dict[str, Any]) -> str:
             f"KC_API_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
             f"KC_API_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
         ])
+
+    lines.extend(_minio_env_lines(config))
+    lines.extend(_centrifugo_env_lines(config))
 
     license_key = config.get("license", {}).get("key", "")
     deploy_env = config.get("deploy_env", "development")

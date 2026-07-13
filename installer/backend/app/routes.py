@@ -53,6 +53,10 @@ class DeployRequest(BaseModel):
     superadmin_email: str | None = None
     license_key: str = ""
     database: dict[str, Any] = Field(default_factory=dict)
+    keycloak: dict[str, Any] = Field(default_factory=dict)
+    redis: dict[str, Any] = Field(default_factory=dict)
+    minio: dict[str, Any] = Field(default_factory=dict)
+    centrifugo: dict[str, Any] = Field(default_factory=dict)
     monolith: dict[str, Any] = Field(default_factory=dict)
     distributed: dict[str, Any] = Field(default_factory=dict)
     kubernetes: dict[str, Any] = Field(default_factory=dict)
