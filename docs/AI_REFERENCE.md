@@ -398,6 +398,7 @@ git pull   # VERSION / IMAGE_TAG updated
 | License trial / signature | `installer/shared/license.py`, `scripts/repair-license-keys.py` |
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
 | Login → `localhost:8081` | `scripts/lib/frontend-install-build.sh`, `scripts/install.sh`, `elt-frontend/src/lib/keycloak.ts` — then **fresh install**, not rebuild mid-flight |
+| Frontend build: `path ".../elt-frontend" not found` | Wizard `docker build` via socket can’t see host paths — stream context in `frontend-install-build.sh` (`tar \| docker build -`) |
 | Compose / service wiring | `compose/monolith.yml` |
 | Image versions | `VERSION`, `.env.platform.example` |
 

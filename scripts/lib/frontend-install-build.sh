@@ -469,12 +469,25 @@ frontend_install_build() {
   echo "  NEXT_PUBLIC_KC_URL=${kc_url}"
   echo "  NEXT_PUBLIC_API_URL=${api_url}"
 
-  if ! docker build -t "$tag" "$frontend_dir" \
-    --build-arg "NEXT_PUBLIC_API_URL=${api_url}" \
-    --build-arg "NEXT_PUBLIC_BUILD_ID=${build_id}" \
-    --build-arg "NEXT_PUBLIC_KC_URL=${kc_url}" \
-    --build-arg "NEXT_PUBLIC_KC_REALM=${kc_realm}" \
-    --build-arg "NEXT_PUBLIC_KC_CLIENT_ID=${kc_client}"; then
+  # Inside the wizard, docker build PATH is prepared by the *client* filesystem.
+  # Host paths like /home/ubuntu/elt-frontend are not visible inside the container
+  # even though the daemon can mount them — stream the context from the host instead.
+  local build_args=(
+    -t "$tag"
+    --build-arg "NEXT_PUBLIC_API_URL=${api_url}"
+    --build-arg "NEXT_PUBLIC_BUILD_ID=${build_id}"
+    --build-arg "NEXT_PUBLIC_KC_URL=${kc_url}"
+    --build-arg "NEXT_PUBLIC_KC_REALM=${kc_realm}"
+    --build-arg "NEXT_PUBLIC_KC_CLIENT_ID=${kc_client}"
+  )
+  if frontend_install_in_installer; then
+    if ! docker run --rm -v "${frontend_dir}:/src:ro" alpine:3.20 \
+      tar -C /src -cf - . \
+      | docker build "${build_args[@]}" -; then
+      echo "ERROR: Frontend docker build failed." >&2
+      return 1
+    fi
+  elif ! docker build "${build_args[@]}" "$frontend_dir"; then
     echo "ERROR: Frontend docker build failed." >&2
     return 1
   fi
