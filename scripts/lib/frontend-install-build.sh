@@ -162,6 +162,23 @@ frontend_install_resolve_frontend_dir() {
   echo "$(dirname "$host_root")/elt-frontend"
 }
 
+frontend_install_clone_repo_url() {
+  local repo="${1:-${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}}"
+  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+
+  if [[ -z "$token" ]]; then
+    printf '%s' "$repo"
+    return 0
+  fi
+
+  if [[ "$repo" =~ ^https://github\.com/ ]]; then
+    printf 'https://%s@github.com/%s' "$token" "${repo#https://github.com/}"
+    return 0
+  fi
+
+  printf '%s' "$repo"
+}
+
 frontend_install_host_dockerfile_exists() {
   local frontend_dir="$1"
   local name parent
@@ -179,13 +196,40 @@ frontend_install_host_dockerfile_exists() {
   docker run --rm -v "${parent}:/work:ro" alpine:3.20 test -f "/work/${name}/Dockerfile"
 }
 
-frontend_install_ensure_checkout() {
+frontend_install_assert_frontend_ready() {
   local frontend_dir="$1"
-  local repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
-  local ref="${ELT_FRONTEND_REF:-}"
   local name parent
 
+  if [[ -f "${frontend_dir}/Dockerfile" ]]; then
+    return 0
+  fi
+
+  if frontend_install_in_installer; then
+    name="$(basename "$frontend_dir")"
+    parent="$(dirname "$frontend_dir")"
+    if docker run --rm -v "${parent}:/work:ro" alpine:3.20 test -f "/work/${name}/Dockerfile"; then
+      return 0
+    fi
+  fi
+
+  echo "ERROR: Frontend source is not ready at ${frontend_dir}" >&2
+  echo "       Expected a Dockerfile from git clone or a sibling checkout." >&2
+  echo "       On the EC2 host:" >&2
+  echo "         git clone https://github.com/chaturanga836/elt-frontend.git ${frontend_dir}" >&2
+  echo "       Private repo: use a GitHub PAT in the URL or export GITHUB_TOKEN." >&2
+  return 1
+}
+
+frontend_install_ensure_checkout() {
+  local frontend_dir="$1"
+  local repo ref clone_url name parent clone_rc=0
+
+  repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
+  ref="${ELT_FRONTEND_REF:-}"
+  clone_url="$(frontend_install_clone_repo_url "$repo")"
+
   if frontend_install_host_dockerfile_exists "$frontend_dir"; then
+    echo "Using existing frontend source at ${frontend_dir}"
     return 0
   fi
 
@@ -200,31 +244,39 @@ frontend_install_ensure_checkout() {
         alpine:3.20 sh -ec "
           apk add --no-cache git >/dev/null
           rm -rf /work/${name}
-          git clone --depth 1 -b '${ref}' '${repo}' /work/${name}
+          git clone --depth 1 -b '${ref}' '${clone_url}' /work/${name}
           test -f /work/${name}/Dockerfile
-        "
+        " || clone_rc=$?
     else
       docker run --rm \
         -v "${parent}:/work" \
         alpine:3.20 sh -ec "
           apk add --no-cache git >/dev/null
           rm -rf /work/${name}
-          git clone --depth 1 '${repo}' /work/${name}
+          git clone --depth 1 '${clone_url}' /work/${name}
           test -f /work/${name}/Dockerfile
-        "
+        " || clone_rc=$?
     fi
-    return
+    if [[ "$clone_rc" -ne 0 ]]; then
+      echo "ERROR: git clone failed for ${repo}" >&2
+      echo "       elt-frontend is private — clone on the host with a GitHub PAT, or export GITHUB_TOKEN." >&2
+      return 1
+    fi
+    return 0
   fi
 
   if command -v git >/dev/null 2>&1; then
     mkdir -p "$parent"
     if [[ -n "$ref" ]]; then
-      git clone --depth 1 -b "$ref" "$repo" "$frontend_dir"
+      git clone --depth 1 -b "$ref" "$clone_url" "$frontend_dir" || clone_rc=$?
     else
-      git clone --depth 1 "$repo" "$frontend_dir"
+      git clone --depth 1 "$clone_url" "$frontend_dir" || clone_rc=$?
     fi
-    [[ -f "${frontend_dir}/Dockerfile" ]]
-    return
+    if [[ "$clone_rc" -ne 0 || ! -f "${frontend_dir}/Dockerfile" ]]; then
+      echo "ERROR: git clone failed for ${repo}" >&2
+      return 1
+    fi
+    return 0
   fi
 
   if [[ -n "$ref" ]]; then
@@ -233,18 +285,22 @@ frontend_install_ensure_checkout() {
       alpine:3.20 sh -ec "
         apk add --no-cache git >/dev/null
         rm -rf /work/${name}
-        git clone --depth 1 -b '${ref}' '${repo}' /work/${name}
+        git clone --depth 1 -b '${ref}' '${clone_url}' /work/${name}
         test -f /work/${name}/Dockerfile
-      "
+      " || clone_rc=$?
   else
     docker run --rm \
       -v "${parent}:/work" \
       alpine:3.20 sh -ec "
         apk add --no-cache git >/dev/null
         rm -rf /work/${name}
-        git clone --depth 1 '${repo}' /work/${name}
+        git clone --depth 1 '${clone_url}' /work/${name}
         test -f /work/${name}/Dockerfile
-      "
+      " || clone_rc=$?
+  fi
+  if [[ "$clone_rc" -ne 0 ]]; then
+    echo "ERROR: git clone failed for ${repo}" >&2
+    return 1
   fi
 }
 
@@ -401,7 +457,10 @@ frontend_install_build() {
   fi
 
   if ! frontend_install_ensure_checkout "$frontend_dir"; then
-    echo "ERROR: Could not prepare elt-frontend source at ${frontend_dir}" >&2
+    return 1
+  fi
+
+  if ! frontend_install_assert_frontend_ready "$frontend_dir"; then
     return 1
   fi
 

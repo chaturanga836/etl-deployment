@@ -430,15 +430,13 @@ build_install_frontend_image() {
     frontend_install_snapshot_env_on_host "$ef" || true
     return 0
   fi
-  if [[ -n "${STATE_DIR:-}" ]] || [[ "$DEV_BUILD" == true ]]; then
-    echo "ERROR: Frontend build failed — cannot install with registry image (localhost Keycloak URLs)." >&2
-    echo "Common causes: git clone failed, npm build OOM, missing ETL_DEPLOYMENT_HOST_ROOT." >&2
-    echo "On the EC2 host after fixing: bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_IP" >&2
-    return 1
-  fi
+
+  echo "WARN: Install-time frontend build failed." >&2
+  echo "WARN: Common causes: private elt-frontend repo (clone needs GITHUB_TOKEN), npm OOM, missing checkout." >&2
   frontend_install_restore_registry_frontend_image "$ef" || true
-  echo "WARN: Install-time frontend build skipped; using registry FRONTEND_IMAGE from .env." >&2
-  echo "WARN: If login redirects to localhost:8081, run: bash scripts/rebuild-frontend-from-source.sh" >&2
+  echo "WARN: Falling back to registry FRONTEND_IMAGE from .env." >&2
+  echo "WARN: v1.0.3+ resolves localhost URLs in the browser; if login still breaks, run:" >&2
+  echo "WARN:   bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
   return 0
 }
 

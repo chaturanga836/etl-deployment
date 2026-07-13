@@ -69,10 +69,14 @@ export INSTALLER_PORT INSTALLER_BIND INSTALLER_PUBLIC_HOST="$ACCESS_HOST"
 export ETL_DEPLOYMENT_HOST_ROOT="$ROOT_DIR"
 
 INSTALLER_COMPOSE=(compose/installer.yml)
-if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
+if [[ -f "$ROOT_DIR/../etl-back/Dockerfile" && -f "$ROOT_DIR/../elt-frontend/Dockerfile" ]]; then
   INSTALLER_COMPOSE+=(compose/installer.dev.yml)
   export INSTALLER_DEV_BUILD=true
   echo "Local source repos detected — wizard will build images from source instead of pulling from registry."
+  echo ""
+elif [[ -f "$ROOT_DIR/../etl-back/Dockerfile" ]]; then
+  echo "NOTE: etl-back found but elt-frontend is missing — using public GHCR images."
+  echo "      Clone elt-frontend next to etl-deployment only if you need a local frontend build."
   echo ""
 else
   registry_url="$(grep -E '^[[:space:]]*url:' VERSION 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
