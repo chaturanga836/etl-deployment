@@ -103,8 +103,8 @@
         "admin_user": { "type": "string" },
         "admin_password": { "type": "string" },
         "realm": { "type": "string", "default": "workspace-realm" },
-        "admin_client_id": { "type": "string", "default": "admin-cli" },
-        "admin_client_secret": { "type": "string", "default": "" }
+        "admin_client_id": { "type": "string", "default": "workspace-api" },
+        "admin_client_secret": { "type": "string", "default": "changeme-api-secret" }
       }
     },
     "app": {

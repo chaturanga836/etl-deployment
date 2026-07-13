@@ -12,6 +12,7 @@ data:
   KC_DEV_REALM: {{ .Values.keycloak.realm | quote }}
   KC_WEB_CLIENT_ID: {{ .Values.api.env.KC_WEB_CLIENT_ID | quote }}
   KC_ADMIN_CLIENT_ID: {{ .Values.keycloak.adminClientId | quote }}
+  KC_API_CLIENT_ID: {{ .Values.keycloak.adminClientId | quote }}
   PLATFORM_INFRA_URL: {{ .Values.platformInfra.url | quote }}
   SANDBOX_ENABLED: {{ .Values.api.env.SANDBOX_ENABLED | quote }}
   DEBUG: {{ .Values.api.env.DEBUG | quote }}

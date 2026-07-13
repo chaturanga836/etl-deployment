@@ -216,8 +216,10 @@ def render_env(config: dict[str, Any]) -> str:
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
             f"KEYCLOAK_TOKEN_URL=http://keycloak:8080/realms/{realm}/protocol/openid-connect/token",
-            f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'admin-cli')}",
-            f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', '')}",
+            f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
+            f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
+            f"KC_API_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
+            f"KC_API_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
             f"PLATFORM_INFRA_URL={_platform_infra_url(config)}",
             "",
             f"# Public Keycloak URL (browser): {kc_public}",
@@ -228,8 +230,10 @@ def render_env(config: dict[str, Any]) -> str:
             _env_line("KC_ADMIN_PASSWORD", kc["admin_password"]),
             f"KC_DEV_REALM={realm}",
             f"KC_REALM={realm}",
-            f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'admin-cli')}",
-            f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', '')}",
+            f"KC_ADMIN_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
+            f"KC_ADMIN_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
+            f"KC_API_CLIENT_ID={kc.get('admin_client_id', 'workspace-api')}",
+            f"KC_API_CLIENT_SECRET={kc.get('admin_client_secret', 'changeme-api-secret')}",
         ])
 
     license_key = config.get("license", {}).get("key", "")

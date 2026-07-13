@@ -27,8 +27,8 @@
     "admin_user": "admin",
     "admin_password": "changeme",
     "realm": "etl-dev",
-    "admin_client_id": "admin-cli",
-    "admin_client_secret": ""
+    "admin_client_id": "workspace-api",
+    "admin_client_secret": "changeme-api-secret"
   },
   "app": {
     "name": "DT Orch",

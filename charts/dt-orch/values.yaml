@@ -72,12 +72,12 @@ keycloak:
   serverUrl: "http://keycloak:8080"
   tokenUrl: "http://keycloak:8080/realms/workspace-realm/protocol/openid-connect/token"
   realm: workspace-realm
-  adminClientId: admin-cli
+  adminClientId: workspace-api
 
 secrets:
   internalServiceToken: "changeme-internal-token"
   fernetKey: ""
-  kcAdminClientSecret: ""
+  kcAdminClientSecret: "changeme-api-secret"
   licenseKey: ""
   installBootstrapToken: ""
 

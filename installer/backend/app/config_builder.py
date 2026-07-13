@@ -33,8 +33,8 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
             "admin_user": wizard.get("kc_admin_user", "admin"),
             "admin_password": wizard.get("kc_admin_password") or db_password,
             "realm": wizard.get("kc_realm", "workspace-realm"),
-            "admin_client_id": "admin-cli",
-            "admin_client_secret": "",
+            "admin_client_id": "workspace-api",
+            "admin_client_secret": "changeme-api-secret",
         },
         "app": {
             "name": wizard.get("app_name", "DT Orch"),
