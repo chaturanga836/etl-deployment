@@ -188,6 +188,11 @@ def render_env(config: dict[str, Any]) -> str:
             f"HTTP_PORT={http_port}",
             f"API_PORT={api_port}",
             f"FRONTEND_PORT={frontend_port}",
+            # Host publish ports (container internals stay 9000). MinIO owns :9000; infra uses :9100.
+            "MINIO_PORT=9000",
+            "MINIO_CONSOLE_PORT=9001",
+            "INFRA_SERVICE_PORT=9100",
+            "CENTRIFUGO_PORT=8001",
             f"NEXT_PUBLIC_API_URL={next_public_api}",
             f"NEXT_PUBLIC_KC_URL={kc_public}",
             f"NEXT_PUBLIC_KC_REALM={realm}",
