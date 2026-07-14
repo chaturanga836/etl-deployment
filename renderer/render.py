@@ -93,33 +93,23 @@ def _redis_url(config: dict[str, Any]) -> str:
     return f"redis://{host}:{port}/0"
 
 
-def _minio_env_lines(config: dict[str, Any]) -> list[str]:
-    minio = config.get("minio") or {}
-    if not minio:
-        return []
-    host = (minio.get("host") or "").strip() or "platform-shared-minio-storage"
-    port = int(minio.get("port") or 9000)
-    endpoint = f"http://{host}:{port}"
-    return [
-        f"SHARED_MINIO_ENDPOINT={endpoint}",
-        _env_line("SHARED_MINIO_ACCESS_KEY", minio.get("access_key", "")),
-        _env_line("SHARED_MINIO_SECRET_KEY", minio.get("secret_key", "")),
-        f"SHARED_STORAGE_BUCKET={minio.get('bucket') or 'data'}",
-        "",
-    ]
-
-
 def _centrifugo_env_lines(config: dict[str, Any]) -> list[str]:
     cf = config.get("centrifugo") or {}
     if not cf:
         return []
-    host = (cf.get("host") or "").strip() or "localhost"
-    port = int(cf.get("http_port") or 8001)
+    source = (cf.get("source") or "bundled").strip()
+    if source == "bundled":
+        host = "centrifugo"
+        port = 8000
+    else:
+        host = (cf.get("host") or "").strip() or "localhost"
+        port = int(cf.get("http_port") or 8001)
     api_url = f"http://{host}:{port}"
     ws_url = f"ws://{host}:{port}/connection/websocket"
     lines = [
         f"CENTRIFUGO_DEFAULT_API_URL={api_url}",
         f"CENTRIFUGO_DEFAULT_WS_URL={ws_url}",
+        f"CENTRIFUGO_SOURCE={source}",
     ]
     if cf.get("api_key"):
         lines.append(_env_line("CENTRIFUGO_DEFAULT_API_KEY", cf["api_key"]))
@@ -127,6 +117,28 @@ def _centrifugo_env_lines(config: dict[str, Any]) -> list[str]:
         lines.append(_env_line("CENTRIFUGO_DEFAULT_TOKEN_HMAC_SECRET_KEY", cf["token_hmac_secret_key"]))
     lines.append("")
     return lines
+
+
+def _minio_env_lines(config: dict[str, Any]) -> list[str]:
+    minio = config.get("minio") or {}
+    if not minio:
+        return []
+    source = (minio.get("source") or "bundled").strip()
+    if source == "bundled":
+        host = "platform-shared-minio-storage"
+        port = 9000
+    else:
+        host = (minio.get("host") or "").strip() or "platform-shared-minio-storage"
+        port = int(minio.get("port") or 9000)
+    endpoint = f"http://{host}:{port}"
+    return [
+        f"SHARED_MINIO_ENDPOINT={endpoint}",
+        _env_line("SHARED_MINIO_ACCESS_KEY", minio.get("access_key", "")),
+        _env_line("SHARED_MINIO_SECRET_KEY", minio.get("secret_key", "")),
+        f"SHARED_STORAGE_BUCKET={minio.get('bucket') or 'data'}",
+        f"MINIO_SOURCE={source}",
+        "",
+    ]
 
 
 def _platform_infra_url(config: dict[str, Any]) -> str:

@@ -31,6 +31,14 @@ x-api-env: &api-env
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
   LICENSE_PUBLIC_KEY_PATH: /etc/dt-orch/license-public.pem
+  SHARED_MINIO_ENDPOINT: ${SHARED_MINIO_ENDPOINT:-http://platform-shared-minio-storage:9000}
+  SHARED_MINIO_ACCESS_KEY: ${SHARED_MINIO_ACCESS_KEY:-minioadmin}
+  SHARED_MINIO_SECRET_KEY: ${SHARED_MINIO_SECRET_KEY:-minioadmin}
+  SHARED_STORAGE_BUCKET: ${SHARED_STORAGE_BUCKET:-data}
+  CENTRIFUGO_DEFAULT_API_URL: ${CENTRIFUGO_DEFAULT_API_URL:-http://centrifugo:8000}
+  CENTRIFUGO_DEFAULT_WS_URL: ${CENTRIFUGO_DEFAULT_WS_URL:-ws://centrifugo:8000/connection/websocket}
+  CENTRIFUGO_DEFAULT_API_KEY: ${CENTRIFUGO_DEFAULT_API_KEY:-}
+  CENTRIFUGO_DEFAULT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_DEFAULT_TOKEN_HMAC_SECRET_KEY:-}
 
 services:
   postgres:
@@ -60,8 +68,65 @@ services:
     container_name: elt-redis
     restart: unless-stopped
     profiles: [full, backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     networks:
       - elt-net
+
+  # Shared BaaS object storage — one platform MinIO for all projects (bucket per project).
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2024-12-18T13-15-44Z}
+    container_name: platform-shared-minio-storage
+    restart: unless-stopped
+    profiles: [full, backend]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${SHARED_MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${SHARED_MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - elt-net
+      - data-plane-net
+
+  # Shared BaaS realtime broker — one Centrifugo; isolate projects via channel ACLs.
+  centrifugo:
+    image: ${CENTRIFUGO_IMAGE:-centrifugo/centrifugo:v5.4.9}
+    container_name: platform-shared-centrifugo
+    restart: unless-stopped
+    profiles: [full, backend]
+    command: centrifugo --health
+    environment:
+      CENTRIFUGO_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_DEFAULT_TOKEN_HMAC_SECRET_KEY:-changeme-centrifugo-hmac}
+      CENTRIFUGO_API_KEY: ${CENTRIFUGO_DEFAULT_API_KEY:-changeme-centrifugo-api-key}
+      CENTRIFUGO_ADMIN_PASSWORD: ${CENTRIFUGO_ADMIN_PASSWORD:-admin}
+      CENTRIFUGO_ADMIN_SECRET: ${CENTRIFUGO_ADMIN_SECRET:-admin-secret}
+      CENTRIFUGO_ALLOWED_ORIGINS: "*"
+      CENTRIFUGO_HEALTH: "true"
+      CENTRIFUGO_PORT: "8000"
+    ports:
+      - "${CENTRIFUGO_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - elt-net
+      - data-plane-net
 
   api:
     image: ${API_IMAGE:-ghcr.io/YOUR_GITHUB_ORG/dt-orch-api:v1.0.0}
@@ -81,9 +146,11 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
-      infra-service:
         condition: service_healthy
+      minio:
+        condition: service_started
+      centrifugo:
+        condition: service_started
       scraper-service:
         condition: service_healthy
     healthcheck:
@@ -160,9 +227,11 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
-      infra-service:
         condition: service_healthy
+      minio:
+        condition: service_started
+      centrifugo:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -282,3 +351,4 @@ volumes:
   backend_logs:
   ollama_data:
   infra_instances:
+  minio_data:

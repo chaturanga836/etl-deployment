@@ -68,8 +68,16 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
         },
         "centrifugo": {
             "source": centrifugo_cfg.get("source", "bundled"),
-            "host": (centrifugo_cfg.get("host") or "").strip() or "localhost",
-            "http_port": int(centrifugo_cfg.get("http_port") or 8001),
+            "host": (
+                "centrifugo"
+                if centrifugo_cfg.get("source", "bundled") == "bundled"
+                else ((centrifugo_cfg.get("host") or "").strip() or "localhost")
+            ),
+            "http_port": (
+                8000
+                if centrifugo_cfg.get("source", "bundled") == "bundled"
+                else int(centrifugo_cfg.get("http_port") or 8001)
+            ),
             "api_key": (centrifugo_cfg.get("api_key") or "").strip(),
             "token_hmac_secret_key": (centrifugo_cfg.get("token_hmac_secret_key") or "").strip(),
         },

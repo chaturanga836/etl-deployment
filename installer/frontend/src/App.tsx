@@ -731,12 +731,24 @@ export default function App() {
         return (
           <Card title="MinIO (object storage)">
             <Paragraph type="secondary">
-              Shared storage defaults written to the install environment for first provisioning.
+              Shared platform MinIO started with the stack. Each project gets its own bucket
+              (proj-{'{id}'}) — no per-project MinIO containers.
             </Paragraph>
             <SourceRadios
               value={wizard.minio.source}
-              onChange={(source) => update({ minio: { ...wizard.minio, source } })}
-              bundledLabel="Provision shared MinIO for me"
+              onChange={(source) =>
+                update({
+                  minio: {
+                    ...wizard.minio,
+                    source,
+                    host:
+                      source === 'bundled'
+                        ? 'platform-shared-minio-storage'
+                        : wizard.minio.host,
+                  },
+                })
+              }
+              bundledLabel="Install shared MinIO for me"
               externalLabel="Use existing MinIO / S3"
             />
             <Form layout="vertical">
@@ -778,12 +790,22 @@ export default function App() {
         return (
           <Card title="Centrifugo (realtime notifications)">
             <Paragraph type="secondary">
-              Defaults used when the first organization enables realtime notifications.
+              Shared platform Centrifugo starts with the stack. Projects are isolated by channel
+              (org / workspace) — no per-org broker containers.
             </Paragraph>
             <SourceRadios
               value={wizard.centrifugo.source}
-              onChange={(source) => update({ centrifugo: { ...wizard.centrifugo, source } })}
-              bundledLabel="Use platform defaults"
+              onChange={(source) =>
+                update({
+                  centrifugo: {
+                    ...wizard.centrifugo,
+                    source,
+                    host: source === 'bundled' ? 'centrifugo' : wizard.centrifugo.host,
+                    http_port: source === 'bundled' ? 8000 : wizard.centrifugo.http_port || 8001,
+                  },
+                })
+              }
+              bundledLabel="Install Centrifugo for me"
               externalLabel="Use existing Centrifugo"
             />
             <Form layout="vertical">

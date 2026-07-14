@@ -177,8 +177,8 @@ export const defaultWizard: WizardState = {
   },
   centrifugo: {
     source: 'bundled',
-    host: 'localhost',
-    http_port: 8001,
+    host: 'centrifugo',
+    http_port: 8000,
     api_key: randomSecret(24),
     token_hmac_secret_key: randomSecret(32),
   },

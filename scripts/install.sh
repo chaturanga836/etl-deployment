@@ -749,6 +749,33 @@ for i in $(seq 1 90); do
   sleep 2
 done
 
+# Warm shared BaaS services when running the full monolith profile.
+if [[ "$PROFILE" == "full" || "$PROFILE" == "backend" ]]; then
+  echo "Checking shared MinIO health..."
+  for i in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:${MINIO_PORT:-9000}/minio/health/live" >/dev/null 2>&1; then
+      echo "MinIO health check passed."
+      break
+    fi
+    if [[ "$i" -eq 30 ]]; then
+      echo "WARNING: MinIO health check timed out (shared object storage may be unavailable)."
+    fi
+    sleep 2
+  done
+
+  echo "Checking shared Centrifugo health..."
+  for i in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:${CENTRIFUGO_PORT:-8001}/health" >/dev/null 2>&1; then
+      echo "Centrifugo health check passed."
+      break
+    fi
+    if [[ "$i" -eq 30 ]]; then
+      echo "WARNING: Centrifugo health check timed out (realtime notifications may be unavailable)."
+    fi
+    sleep 2
+  done
+fi
+
 cat <<EOF
 
 DT Orch is running (profile: ${PROFILE}).
@@ -756,7 +783,8 @@ DT Orch is running (profile: ${PROFILE}).
   Stack URL:       ${APP_URL:-http://localhost}
   API (direct):    http://localhost:${API_PORT:-8000}
   Keycloak:        http://localhost:${KEYCLOAK_PORT:-8081}
-  Infra service:   http://localhost:${INFRA_SERVICE_PORT:-9000}
+  MinIO:           http://localhost:${MINIO_PORT:-9000}
+  Centrifugo:      http://localhost:${CENTRIFUGO_PORT:-8001}
 
 Database migrations run automatically when the API container starts.
 
