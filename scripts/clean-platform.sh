@@ -65,12 +65,13 @@ echo "=== Removing leftover DT Orch containers ==="
 for name in \
   dt-orch-api dt-orch-worker dt-orch-frontend dt-orch-scraper dt-orch-installer \
   elt-proxy elt-keycloak elt-postgres elt-redis \
-  baas-infra-service; do
+  baas-infra-service \
+  platform-shared-minio-storage platform-shared-centrifugo; do
   docker rm -f "$name" 2>/dev/null || true
 done
 
 echo "=== Removing per-org / per-workspace data-plane containers ==="
-docker ps -a --format '{{.Names}}' | grep -E '^(org-[0-9]+-.*-broker|ws-[0-9]+-.*-(db|storage)|platform-shared-.*-storage)$' \
+docker ps -a --format '{{.Names}}' | grep -E '^(org-[0-9]+-.*-broker|ws-[0-9]+-.*-(db|storage)|platform-shared-)' \
   | xargs -r docker rm -f 2>/dev/null || true
 
 echo "=== Removing DT Orch volumes ==="
