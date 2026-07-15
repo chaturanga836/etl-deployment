@@ -42,14 +42,6 @@ export type HostInfo = {
   security_group_ports: number[];
 };
 
-export type TrialLicense = {
-  license_key: string;
-  customer_id: string;
-  edition: string;
-  expires_at: string | null;
-  trial_days: number;
-};
-
 export type ServiceSource = 'bundled' | 'external';
 
 export type WizardState = {
@@ -219,15 +211,6 @@ export async function fetchHostInfo(): Promise<HostInfo> {
   return r.json();
 }
 
-export async function requestTrialLicense(): Promise<TrialLicense> {
-  const r = await fetch(`${API}/license/trial`, { method: 'POST' });
-  if (!r.ok) {
-    const err = await r.json();
-    throw new Error(err.detail || 'Could not start trial');
-  }
-  return r.json();
-}
-
 export async function fetchPrerequisites(): Promise<Prerequisites> {
   const r = await fetch(`${API}/prerequisites`);
   return r.json();
@@ -251,19 +234,6 @@ export async function validateDatabase(body: WizardState['database']) {
   }
 }
 
-export async function validateLicense(key: string) {
-  const r = await fetch(`${API}/validate/license`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key }),
-  });
-  if (!r.ok) {
-    const err = await r.json();
-    throw new Error(err.detail || 'Invalid license');
-  }
-  return r.json();
-}
-
 export async function startDeploy(wizard: WizardState): Promise<string> {
   const r = await fetch(`${API}/deploy`, {
     method: 'POST',
@@ -276,7 +246,7 @@ export async function startDeploy(wizard: WizardState): Promise<string> {
       superadmin_username: wizard.superadmin_username,
       superadmin_password: wizard.superadmin_password,
       superadmin_email: wizard.superadmin_email || undefined,
-      license_key: wizard.license_key,
+      license_key: '',
       database: wizard.database,
       keycloak: wizard.keycloak,
       redis: wizard.redis,

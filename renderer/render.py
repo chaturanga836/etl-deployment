@@ -314,7 +314,6 @@ def render_env(config: dict[str, Any]) -> str:
     lines.extend(_minio_env_lines(config))
     lines.extend(_centrifugo_env_lines(config))
 
-    license_key = config.get("license", {}).get("key", "")
     deploy_env = config.get("deploy_env", "development")
     bootstrap_token = secrets.token_hex(32)
     superadmin = config.get("superadmin", {})
@@ -328,14 +327,8 @@ def render_env(config: dict[str, Any]) -> str:
         _env_line("SUPERADMIN_USERNAME", superadmin.get("username", "")),
         _env_line("SUPERADMIN_EMAIL", super_email),
         "",
+        "# LICENSE_KEY omitted — no license or trial gate.",
     ])
-    if deploy_env == "production":
-        lines.append(_env_line("LICENSE_KEY", license_key))
-    else:
-        lines.append(
-            "# LICENSE_KEY omitted in development — API starts without offline license gate; "
-            "installer records trial/license separately."
-        )
 
     return "\n".join(lines) + "\n"
 

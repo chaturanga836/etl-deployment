@@ -391,9 +391,8 @@ preflight_license_key() {
 
 prepare_runtime_env() {
   local ef="$1"
-  local deploy_env="${DTORCH_ENV:-${ELT_ENV:-development}}"
-  if [[ "$deploy_env" != "production" && -f "$ef" ]]; then
-    # Development installs must not inject LICENSE_KEY — mismatched keys crash API startup.
+  if [[ -f "$ef" ]]; then
+    # Licensing disabled — never inject LICENSE_KEY into runtime env.
     sed -i.bak '/^LICENSE_KEY=/d' "$ef"
     rm -f "${ef}.bak"
   fi

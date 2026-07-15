@@ -8,11 +8,10 @@ INSTALLER_PORT="${INSTALLER_PORT:-3000}"
 INSTALLER_BIND="${INSTALLER_BIND:-0.0.0.0}"
 
 if [[ ! -f config/license-public.pem || ! -f config/license-private.pem ]]; then
-  echo "Generating license key pair (required for free trials)..."
-  python3 scripts/generate-license-keys.py --out-dir config
+  # Optional: compose may still mount the public key; licensing itself is unused.
+  python3 scripts/generate-license-keys.py --out-dir config >/dev/null 2>&1 || true
 else
-  echo "Checking license key pair..."
-  python3 scripts/repair-license-keys.py --out-dir config
+  python3 scripts/repair-license-keys.py --out-dir config >/dev/null 2>&1 || true
 fi
 
 _imds_token() {
@@ -60,7 +59,6 @@ if [[ -n "$PUBLIC_IP" || -n "$PUBLIC_DNS" ]]; then
   echo ""
 fi
 echo "  All configuration is done in the wizard — no manual .env editing."
-echo "  Without a license key, a 3-month trial is applied automatically."
 echo ""
 echo "================================================================"
 echo ""

@@ -30,11 +30,9 @@ import {
   fetchSupportReport,
   fetchUpgradeInfo,
   persistActiveJob,
-  requestTrialLicense,
   startDeploy,
   startUpgrade,
   validateDatabase,
-  validateLicense,
   type DeployJobSnapshot,
   type HostInfo,
   type InstallDefaults,
@@ -54,7 +52,7 @@ const { Paragraph, Text, Link } = Typography;
 const MIN_USERNAME_LENGTH = 3;
 const MIN_PASSWORD_LENGTH = 8;
 
-/** User-visible step labels (matches internal step indices 0–12). */
+/** User-visible step labels (matches internal step indices 0–11). */
 const STEP_LABELS = [
   'Welcome',
   'Type',
@@ -64,16 +62,15 @@ const STEP_LABELS = [
   'MinIO',
   'Centrifugo',
   'Account',
-  'License',
   'Website',
   'Confirm',
   'Installing',
   'Done',
 ];
 
-const LAST_FORM_STEP = 10;
-const INSTALLING_STEP = 11;
-const DONE_STEP = 12;
+const LAST_FORM_STEP = 9;
+const INSTALLING_STEP = 10;
+const DONE_STEP = 11;
 
 function isAccountStepValid(wizard: WizardState): boolean {
   return (
@@ -161,9 +158,6 @@ export default function App() {
   const [prereqs, setPrereqs] = useState<Prerequisites | null>(null);
   const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
   const [installDefaults, setInstallDefaults] = useState<InstallDefaults | null>(null);
-  const [licenseMode, setLicenseMode] = useState<'license' | 'trial'>('license');
-  const [licenseValidated, setLicenseValidated] = useState(false);
-  const [licenseInfo, setLicenseInfo] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [loginUrl, setLoginUrl] = useState('');
   const [deployError, setDeployError] = useState('');
@@ -334,17 +328,7 @@ export default function App() {
       );
       return;
     }
-    if (step === 8 && licenseMode === 'trial') {
-      try {
-        const trial = await requestTrialLicense();
-        update({ license_key: trial.license_key });
-        setLicenseInfo(`Free trial until ${trial.expires_at?.slice(0, 10) ?? '—'}`);
-      } catch (e) {
-        message.error(e instanceof Error ? e.message : 'Could not start free trial');
-        return;
-      }
-    }
-    if (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
+    if (step === 8 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
       message.warning('Enter the website address people will use to open DT Orch.');
       return;
     }
@@ -359,8 +343,7 @@ export default function App() {
     || (step === 5 && !isMinioStepValid(wizard))
     || (step === 6 && !isCentrifugoStepValid(wizard))
     || (step === 7 && !isAccountStepValid(wizard))
-    || (step === 8 && licenseMode === 'license' && !licenseValidated)
-    || (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
+    || (step === 8 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
   );
 
   const back = () => setStep((s) => Math.max(0, s - 1));
@@ -899,84 +882,6 @@ export default function App() {
           </Card>
         );
       case 8:
-        return (
-          <Card title="License">
-            <Radio.Group
-              value={licenseMode}
-              onChange={(e) => {
-                const mode = e.target.value as 'license' | 'trial';
-                setLicenseMode(mode);
-                setLicenseValidated(false);
-                setLicenseInfo(null);
-                update({ license_key: '' });
-              }}
-              style={{ marginBottom: 16 }}
-            >
-              <Space direction="vertical">
-                <Radio value="license">
-                  <Text strong>Activate license</Text>
-                  <br />
-                  <Text type="secondary">I have a license key from my vendor.</Text>
-                </Radio>
-                <Radio value="trial">
-                  <Text strong>Free trial</Text>
-                  <br />
-                  <Text type="secondary">3-month trial — no license key required.</Text>
-                </Radio>
-              </Space>
-            </Radio.Group>
-            {licenseMode === 'license' && (
-              <Form layout="vertical">
-                <Form.Item label="License key" required>
-                  <Input.TextArea
-                    rows={4}
-                    value={wizard.license_key}
-                    onChange={(e) => {
-                      update({ license_key: e.target.value });
-                      setLicenseValidated(false);
-                      setLicenseInfo(null);
-                    }}
-                    placeholder="Paste your license key here"
-                  />
-                </Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
-                    disabled={!wizard.license_key.trim()}
-                    onClick={async () => {
-                      try {
-                        const info = await validateLicense(wizard.license_key);
-                        setLicenseValidated(true);
-                        setLicenseInfo(
-                          `Valid — ${info.edition} edition${info.expires_at ? `, expires ${info.expires_at.slice(0, 10)}` : ''}`,
-                        );
-                        message.success('License validated');
-                      } catch (e) {
-                        setLicenseValidated(false);
-                        setLicenseInfo(null);
-                        message.error(e instanceof Error ? e.message : 'Invalid license');
-                      }
-                    }}
-                  >
-                    Validate license
-                  </Button>
-                  {licenseValidated && licenseInfo && (
-                    <Text type="success">{licenseInfo}</Text>
-                  )}
-                </Space>
-              </Form>
-            )}
-            {licenseMode === 'trial' && (
-              <Alert
-                type="info"
-                showIcon
-                message="Free trial selected"
-                description="Click Next to activate your 3-month trial and continue."
-              />
-            )}
-          </Card>
-        );
-      case 9:
         if (wizard.deployment_mode === 'monolith') {
           return (
             <Card title="Your website address">
@@ -1007,7 +912,7 @@ export default function App() {
             <Paragraph type="secondary">Complete website settings for this install mode.</Paragraph>
           </Card>
         );
-      case 10:
+      case 9:
         return (
           <Card title="Ready to install">
             <Descriptions bordered column={1} size="middle">
@@ -1032,11 +937,6 @@ export default function App() {
               <Descriptions.Item label="Centrifugo">
                 {wizard.centrifugo.host}:{wizard.centrifugo.http_port}
               </Descriptions.Item>
-              <Descriptions.Item label="License">
-                {licenseMode === 'trial' || !wizard.license_key
-                  ? '3-month free trial'
-                  : 'Licensed'}
-              </Descriptions.Item>
               <Descriptions.Item label="Website">
                 {wizard.monolith.public_host
                   ? `http://${wizard.monolith.public_host}`
@@ -1048,7 +948,7 @@ export default function App() {
             </Button>
           </Card>
         );
-      case 11:
+      case 10:
         return (
           <Card title={jobKind === 'upgrade' ? 'Upgrading…' : 'Installing…'}>
             <Paragraph>
@@ -1086,7 +986,7 @@ export default function App() {
             </div>
           </Card>
         );
-      case 12:
+      case 11:
         return (
           <>
             <Result

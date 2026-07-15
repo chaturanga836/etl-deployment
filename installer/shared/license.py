@@ -112,7 +112,7 @@ def license_key_directory() -> Path:
         return ensure_license_keypair(state_dir)
     except OSError as exc:
         raise FileNotFoundError(
-            "Could not create license keys for free trial. "
+            "Could not create license keypair under config/. "
             "On the server run: python3 scripts/repair-license-keys.py --out-dir config"
         ) from exc
 
@@ -185,14 +185,8 @@ def issue_trial_license(*, customer_id: str | None = None, days: int = TRIAL_DAY
 
 
 def resolve_license_key(key: str | None) -> str:
-    """Return a valid license key, issuing a trial when none was provided."""
-    key = (key or "").strip()
-    if key:
-        validate_license_key(key)
-        return key
-    trial = issue_trial_license()
-    validate_license_key(trial)
-    return trial
+    """Licensing disabled — platform is freely available."""
+    return ""
 
 
 def _load_public_key() -> str:
@@ -239,15 +233,9 @@ def validate_license_key(key: str) -> LicenseInfo:
 
 
 def license_required_in_env() -> bool:
-    deploy_env = os.getenv("DTORCH_ENV") or os.getenv("ELT_ENV") or "development"
-    return deploy_env == "production"
+    return False
 
 
 def assert_license_valid_if_required(key: str | None) -> LicenseInfo | None:
-    if not license_required_in_env():
-        if not key:
-            return None
-        return validate_license_key(key)
-    if not key:
-        raise ValueError("LICENSE_KEY is required in production")
-    return validate_license_key(key)
+    """Licensing disabled — always allow startup."""
+    return None

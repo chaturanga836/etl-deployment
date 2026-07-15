@@ -4,28 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-# Shared license validator
-_SHARED = Path(__file__).resolve().parents[2] / "shared"
-if str(_SHARED.parent) not in sys.path:
-    sys.path.insert(0, str(_SHARED.parent))
-
-from shared.license import issue_trial_license, resolve_license_key, validate_license_key  # noqa: E402
-
-from app.host_info import detect_public_host  # noqa: E402
-from app.jobs import JobStatus, create_job, get_active_job, get_job, job_snapshot  # noqa: E402
-from app.orchestrator import run_deploy_job, run_upgrade_job  # noqa: E402
-from app.prerequisites import check_prerequisites  # noqa: E402
-from app.release_manifest import compare_versions, load_install_defaults, load_platform_release  # noqa: E402
-from app.state import STATE_DIR, read_env_value, resolve_env_path  # noqa: E402
-from app.support_report import build_support_report  # noqa: E402
+from app.host_info import detect_public_host
+from app.jobs import JobStatus, create_job, get_active_job, get_job, job_snapshot
+from app.orchestrator import run_deploy_job, run_upgrade_job
+from app.prerequisites import check_prerequisites
+from app.release_manifest import compare_versions, load_install_defaults, load_platform_release
+from app.state import STATE_DIR, read_env_value, resolve_env_path
+from app.support_report import build_support_report
 
 router = APIRouter(prefix="/api")
 
@@ -36,10 +27,6 @@ class DatabaseValidateRequest(BaseModel):
     user: str
     password: str
     database: str = "postgres"
-
-
-class LicenseValidateRequest(BaseModel):
-    key: str
 
 
 class DeployRequest(BaseModel):
@@ -163,36 +150,6 @@ def host_info() -> dict[str, Any]:
     return detect_public_host()
 
 
-@router.post("/license/trial")
-def create_trial_license() -> dict[str, Any]:
-    try:
-        token = issue_trial_license()
-        info = validate_license_key(token)
-        return {
-            "license_key": token,
-            "customer_id": info.customer_id,
-            "edition": info.edition,
-            "expires_at": info.expires_at.isoformat() if info.expires_at else None,
-            "trial_days": 90,
-        }
-    except (ValueError, FileNotFoundError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/validate/license")
-def validate_license(body: LicenseValidateRequest) -> dict[str, Any]:
-    try:
-        info = validate_license_key(body.key)
-        return {
-            "status": "ok",
-            "customer_id": info.customer_id,
-            "edition": info.edition,
-            "expires_at": info.expires_at.isoformat() if info.expires_at else None,
-        }
-    except (ValueError, FileNotFoundError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
 def _apply_install_defaults(payload: dict[str, Any]) -> dict[str, Any]:
     defaults = load_install_defaults()
     if not payload.get("registry_url") or payload["registry_url"] == "ghcr.io/YOUR_GITHUB_ORG":
@@ -206,14 +163,10 @@ def _apply_install_defaults(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/deploy")
 async def start_deploy(body: DeployRequest) -> dict[str, str]:
-    try:
-        license_key = resolve_license_key(body.license_key)
-    except (ValueError, FileNotFoundError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     job = create_job()
     payload = _apply_install_defaults(body.model_dump())
-    payload["license_key"] = license_key
+    # Platform is freely available — no license or trial key.
+    payload["license_key"] = ""
     asyncio.create_task(run_deploy_job(job, payload))
     return {"job_id": job.id}
 
