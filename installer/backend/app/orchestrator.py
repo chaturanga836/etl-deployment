@@ -139,6 +139,7 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
             env[k.strip()] = v.strip()
 
     realm_script = SCRIPTS_DIR / "bootstrap-keycloak-realm.py"
+    api_roles_script = SCRIPTS_DIR / "bootstrap-workspace-api-roles.py"
     super_script = SCRIPTS_DIR / "bootstrap-superadmin.py"
 
     py = sys.executable
@@ -146,6 +147,12 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
     code = await _stream_process(job, [py, str(realm_script)], cwd=DEPLOYMENT_ROOT, env={**os.environ, **env})
     if code != 0:
         raise RuntimeError("Keycloak realm bootstrap failed")
+
+    code = await _stream_process(
+        job, [py, str(api_roles_script)], cwd=DEPLOYMENT_ROOT, env={**os.environ, **env}
+    )
+    if code != 0:
+        raise RuntimeError("Keycloak workspace-api role bootstrap failed")
 
     superadmin = config["superadmin"]
     job.push_phase("bootstrap_admin")

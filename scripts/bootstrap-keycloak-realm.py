@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from kc_bootstrap_common import configure_realms_for_http, kc_base, master_token
 
 ROOT = Path(__file__).resolve().parents[1]
 REALM_FILE = ROOT / "keycloak" / "realm-workspace.json"
+API_ROLES_SCRIPT = ROOT / "scripts" / "bootstrap-workspace-api-roles.py"
 
 
 def main() -> int:
@@ -27,14 +29,17 @@ def main() -> int:
         check = client.get(f"{kc_base()}/admin/realms/{realm_name}", headers=headers)
         if check.status_code == 200:
             print(f"Realm {realm_name} already exists")
-            return 0
+        else:
+            create = client.post(f"{kc_base()}/admin/realms", headers=headers, json=realm_payload)
+            if create.status_code not in (201, 204):
+                print(f"Failed to create realm: {create.status_code} {create.text}", file=sys.stderr)
+                return 1
+            print(f"Imported realm {realm_name}")
 
-        create = client.post(f"{kc_base()}/admin/realms", headers=headers, json=realm_payload)
-        if create.status_code not in (201, 204):
-            print(f"Failed to create realm: {create.status_code} {create.text}", file=sys.stderr)
-            return 1
-
-    print(f"Imported realm {realm_name}")
+    roles_result = subprocess.run([sys.executable, str(API_ROLES_SCRIPT)], check=False)
+    if roles_result.returncode != 0:
+        print("Failed to bootstrap workspace-api service account roles", file=sys.stderr)
+        return roles_result.returncode
     return 0
 
 
