@@ -399,6 +399,7 @@ git pull   # VERSION / IMAGE_TAG updated
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
 | Login → `localhost:8081` | `scripts/lib/frontend-install-build.sh`, `scripts/install.sh`, `elt-frontend/src/lib/keycloak.ts` — then **fresh install**, not rebuild mid-flight |
 | Frontend build: `path ".../elt-frontend" not found` | Wizard `docker build` via socket can’t see host paths — stream context in `frontend-install-build.sh` (`tar \| docker build -`) |
+| `realm-management role missing: view-groups` | Keycloak has no such roles — `scripts/bootstrap-workspace-api-roles.py` must use `view-users` / `manage-users` / `query-groups` |
 | Compose / service wiring | `compose/monolith.yml` |
 | Image versions | `VERSION`, `.env.platform.example` |
 

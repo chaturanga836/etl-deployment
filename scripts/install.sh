@@ -471,6 +471,16 @@ keycloak_bootstrap_base() {
   echo "${base%/}"
 }
 
+# Host-published service URL when install.sh runs inside the wizard container.
+host_loopback_base() {
+  local port="$1"
+  if running_installer_with_docker_sock; then
+    echo "http://${KC_INSTALLER_HOST:-host.docker.internal}:${port}"
+    return 0
+  fi
+  echo "http://127.0.0.1:${port}"
+}
+
 wait_for_keycloak() {
   local kc_url
   kc_url="$(keycloak_bootstrap_base)/realms/master"
@@ -750,9 +760,10 @@ done
 
 # Warm shared BaaS services when running the full monolith profile.
 if [[ "$PROFILE" == "full" || "$PROFILE" == "backend" ]]; then
-  echo "Checking shared MinIO health..."
+  minio_health_url="$(host_loopback_base "${MINIO_PORT:-9000}")/minio/health/live"
+  echo "Checking shared MinIO health at ${minio_health_url}..."
   for i in $(seq 1 30); do
-    if curl -sf "http://127.0.0.1:${MINIO_PORT:-9000}/minio/health/live" >/dev/null 2>&1; then
+    if curl -sf "$minio_health_url" >/dev/null 2>&1; then
       echo "MinIO health check passed."
       break
     fi
@@ -762,9 +773,10 @@ if [[ "$PROFILE" == "full" || "$PROFILE" == "backend" ]]; then
     sleep 2
   done
 
-  echo "Checking shared Centrifugo health..."
+  centrifugo_health_url="$(host_loopback_base "${CENTRIFUGO_PORT:-8001}")/health"
+  echo "Checking shared Centrifugo health at ${centrifugo_health_url}..."
   for i in $(seq 1 30); do
-    if curl -sf "http://127.0.0.1:${CENTRIFUGO_PORT:-8001}/health" >/dev/null 2>&1; then
+    if curl -sf "$centrifugo_health_url" >/dev/null 2>&1; then
       echo "Centrifugo health check passed."
       break
     fi

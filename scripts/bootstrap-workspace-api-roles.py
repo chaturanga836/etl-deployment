@@ -11,9 +11,9 @@ import httpx
 from kc_bootstrap_common import kc_base, master_token
 
 # Minimum roles for etl-back workspace_access_service (groups, users, invitations).
+# Keycloak has no view-groups / manage-groups client roles — group Admin API access
+# is granted by view-users / manage-users (plus query-groups for search/list).
 WORKSPACE_API_CLIENT_ROLES = (
-    "view-groups",
-    "manage-groups",
     "query-groups",
     "view-users",
     "manage-users",
@@ -92,7 +92,12 @@ def _assign_missing_roles(
             headers=headers,
         )
         if role_resp.status_code >= 400:
-            raise RuntimeError(f"realm-management role missing: {role_name}")
+            # Keycloak never shipped view-groups/manage-groups; skip unknown names.
+            print(
+                f"WARN: realm-management role not found, skipping: {role_name}",
+                file=sys.stderr,
+            )
+            continue
         to_assign.append(role_resp.json())
 
     if not to_assign:
@@ -107,6 +112,30 @@ def _assign_missing_roles(
         raise RuntimeError(f"Failed assigning service account roles: {assign_resp.text}")
     assigned.extend(role["name"] for role in to_assign)
     return assigned
+
+
+def _require_roles(
+    client: httpx.Client,
+    base: str,
+    headers: dict[str, str],
+    *,
+    user_id: str,
+    mgmt_client_uuid: str,
+    required: tuple[str, ...],
+) -> None:
+    existing_resp = client.get(
+        f"{base}/users/{user_id}/role-mappings/clients/{mgmt_client_uuid}",
+        headers=headers,
+    )
+    if existing_resp.status_code >= 400:
+        raise RuntimeError(f"Failed to read service account roles: {existing_resp.text}")
+    existing = {role["name"] for role in existing_resp.json()}
+    missing = [name for name in required if name not in existing]
+    if missing:
+        raise RuntimeError(
+            "workspace-api service account missing required realm-management roles: "
+            + ", ".join(missing)
+        )
 
 
 def main() -> int:
@@ -127,6 +156,14 @@ def main() -> int:
             user_id=service_user_id,
             mgmt_client_uuid=mgmt_uuid,
             role_names=WORKSPACE_API_CLIENT_ROLES,
+        )
+        _require_roles(
+            client,
+            base,
+            headers,
+            user_id=service_user_id,
+            mgmt_client_uuid=mgmt_uuid,
+            required=("view-users", "manage-users", "query-users", "query-groups"),
         )
 
     if assigned:
