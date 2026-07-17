@@ -3,9 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EltPlatformClient = void 0;
 const http_1 = require("./http");
 const database_context_1 = require("./database/database-context");
+const errors_1 = require("./errors");
 class EltPlatformClient {
     constructor(options) {
         this.workspaceId = options.workspaceId;
+        this.defaultDatabaseId = options.databaseId;
         this.http = {
             baseUrl: options.baseUrl,
             auth: {
@@ -18,6 +20,22 @@ class EltPlatformClient {
     }
     database(databaseId) {
         return new database_context_1.DatabaseContext(this, databaseId);
+    }
+    /** Default database namespace configured with `databaseId`. */
+    get db() {
+        if (this.defaultDatabaseId === undefined) {
+            throw new errors_1.DtorchValidationError("No default database configured; pass databaseId or call database(id)");
+        }
+        return this.database(this.defaultDatabaseId);
+    }
+    /** Validate project credentials against the linked workspace. */
+    async validate() {
+        const response = await this.listDatabases();
+        return {
+            ok: true,
+            workspaceId: this.workspaceId,
+            databases: response.databases,
+        };
     }
     listDatabases() {
         return (0, http_1.requestJson)(this.http, "GET", `/api/v1/workspaces/${this.workspaceId}/databases`);

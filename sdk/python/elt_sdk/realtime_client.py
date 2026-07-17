@@ -83,3 +83,7 @@ class EltRealtimeClient:
       if self._client is not None:
           self._client.disconnect()
           self._client = None
+
+
+# Keep direct ``elt_sdk.realtime_client`` imports on the canonical implementation.
+from dtorch.realtime_client import DtorchRealtimeClient as EltRealtimeClient  # noqa: E402,F401,F811

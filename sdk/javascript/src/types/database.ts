@@ -107,14 +107,17 @@ export type WorkspaceDatabaseMigrationInput = {
 };
 
 export type WorkspaceDatabaseMigrationListResponse = {
-  migrations: { version: string; applied_at: string }[];
+  database_id: number;
+  schema_name: string;
+  migrations: { version: string; name?: string | null; applied_at: string }[];
 };
 
 export type WorkspaceDatabaseMigrationApplyResponse = {
   ok: boolean;
-  applied: string[];
-  skipped: string[];
   dry_run: boolean;
+  applied_versions: string[];
+  statements_executed: number;
+  previews: { version: string; statement_count: number }[];
 };
 
 export type WorkspaceDatabaseDdlResponse = {

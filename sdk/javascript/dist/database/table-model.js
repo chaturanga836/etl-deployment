@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TableModel = void 0;
+const errors_1 = require("../errors");
 const sql_builder_1 = require("./sql-builder");
 class TableModel {
     constructor(client, databaseId, tableName) {
@@ -38,11 +39,11 @@ class TableModel {
     }
     async update(originalRow, changes) {
         const detail = await this.schema();
-        const updatedRow = { ...originalRow, ...changes };
-        const sql = (0, sql_builder_1.buildUpdateSql)(detail.schema_name, detail.table_name, detail.columns, originalRow, updatedRow);
+        const sql = (0, sql_builder_1.buildUpdateSql)(detail.schema_name, detail.table_name, detail.columns, originalRow, changes);
         return this.raw(sql);
     }
     async updateByPk(pk, changes) {
+        await this.assertPrimaryKey(pk);
         return this.update({ ...pk }, changes);
     }
     async delete(row) {
@@ -51,10 +52,22 @@ class TableModel {
         return this.raw(sql);
     }
     async deleteByPk(pk) {
+        await this.assertPrimaryKey(pk);
         return this.delete(pk);
     }
     raw(sql) {
         return this.client.executeSql(this.databaseId, sql);
+    }
+    async assertPrimaryKey(pk) {
+        const detail = await this.schema();
+        const keys = detail.columns.filter((column) => column.primary_key).map((column) => column.name);
+        if (keys.length === 0) {
+            throw new errors_1.DtorchValidationError(`Table '${this.tableName}' has no primary key`);
+        }
+        const missing = keys.filter((key) => pk[key] === undefined);
+        if (missing.length > 0) {
+            throw new errors_1.DtorchValidationError(`Missing primary key column(s): ${missing.join(", ")}`);
+        }
     }
 }
 exports.TableModel = TableModel;

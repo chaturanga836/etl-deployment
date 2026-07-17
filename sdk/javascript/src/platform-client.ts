@@ -1,5 +1,6 @@
 import { requestJson, type HttpClientOptions } from "./http";
 import { DatabaseContext } from "./database/database-context";
+import { DtorchValidationError } from "./errors";
 import type {
   WorkspaceDatabaseListResponse,
   WorkspaceDatabaseSqlResponse,
@@ -13,15 +14,18 @@ export type EltPlatformClientOptions = {
   projectKey: string;
   projectSecret: string;
   workspaceId: number;
+  databaseId?: number;
   timeoutMs?: number;
 };
 
 export class EltPlatformClient {
   private http: HttpClientOptions;
   readonly workspaceId: number;
+  readonly defaultDatabaseId?: number;
 
   constructor(options: EltPlatformClientOptions) {
     this.workspaceId = options.workspaceId;
+    this.defaultDatabaseId = options.databaseId;
     this.http = {
       baseUrl: options.baseUrl,
       auth: {
@@ -35,6 +39,26 @@ export class EltPlatformClient {
 
   database(databaseId: number): DatabaseContext {
     return new DatabaseContext(this, databaseId);
+  }
+
+  /** Default database namespace configured with `databaseId`. */
+  get db(): DatabaseContext {
+    if (this.defaultDatabaseId === undefined) {
+      throw new DtorchValidationError(
+        "No default database configured; pass databaseId or call database(id)",
+      );
+    }
+    return this.database(this.defaultDatabaseId);
+  }
+
+  /** Validate project credentials against the linked workspace. */
+  async validate() {
+    const response = await this.listDatabases();
+    return {
+      ok: true as const,
+      workspaceId: this.workspaceId,
+      databases: response.databases,
+    };
   }
 
   listDatabases() {

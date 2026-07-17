@@ -15,10 +15,7 @@ export class EltRuntimeClient {
     this.workspaceId = options.workspaceId;
     this.http = {
       baseUrl: options.baseUrl,
-      auth: {
-        type: "jwt",
-        getAccessToken: () => options.apiKey,
-      },
+      auth: { type: "apiKey", apiKey: options.apiKey },
       timeoutMs: options.timeoutMs ?? 60_000,
     };
   }
@@ -75,17 +72,12 @@ export class EltRuntimeClient {
   /** Pop oldest message — destructive; returns null when empty (requires `queue:pop` scope). */
   async queuePop(queueName: string) {
     const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/pop`;
-    try {
-      return await requestJson<{ id: number; payload: unknown; created_at?: string }>(
-        this.http,
-        "POST",
-        url,
-      );
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      if (status === 204) return null;
-      throw err;
-    }
+    const result = await requestJson<{ id: number; payload: unknown; created_at?: string } | undefined>(
+      this.http,
+      "POST",
+      url,
+    );
+    return result ?? null;
   }
 
   /** Publish realtime notification (requires `notification:publish` scope). */

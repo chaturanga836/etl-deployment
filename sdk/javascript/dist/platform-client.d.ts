@@ -5,13 +5,23 @@ export type EltPlatformClientOptions = {
     projectKey: string;
     projectSecret: string;
     workspaceId: number;
+    databaseId?: number;
     timeoutMs?: number;
 };
 export declare class EltPlatformClient {
     private http;
     readonly workspaceId: number;
+    readonly defaultDatabaseId?: number;
     constructor(options: EltPlatformClientOptions);
     database(databaseId: number): DatabaseContext;
+    /** Default database namespace configured with `databaseId`. */
+    get db(): DatabaseContext;
+    /** Validate project credentials against the linked workspace. */
+    validate(): Promise<{
+        ok: true;
+        workspaceId: number;
+        databases: import("./types/database").WorkspaceDatabaseItem[];
+    }>;
     listDatabases(): Promise<WorkspaceDatabaseListResponse>;
     listTables(databaseId: number): Promise<WorkspaceDatabaseTableListResponse>;
     getTableDetail(databaseId: number, tableName: string): Promise<WorkspaceDatabaseTableDetail>;

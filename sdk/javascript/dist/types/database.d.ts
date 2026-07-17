@@ -91,16 +91,23 @@ export type WorkspaceDatabaseMigrationInput = {
     sql: string;
 };
 export type WorkspaceDatabaseMigrationListResponse = {
+    database_id: number;
+    schema_name: string;
     migrations: {
         version: string;
+        name?: string | null;
         applied_at: string;
     }[];
 };
 export type WorkspaceDatabaseMigrationApplyResponse = {
     ok: boolean;
-    applied: string[];
-    skipped: string[];
     dry_run: boolean;
+    applied_versions: string[];
+    statements_executed: number;
+    previews: {
+        version: string;
+        statement_count: number;
+    }[];
 };
 export type WorkspaceDatabaseDdlResponse = {
     ok: boolean;

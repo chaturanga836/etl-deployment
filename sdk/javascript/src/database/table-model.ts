@@ -4,6 +4,7 @@ import type {
   WorkspaceDatabaseTableDataResponse,
   WorkspaceDatabaseTableDetail,
 } from "../types/database";
+import { DtorchValidationError } from "../errors";
 import {
   buildDeleteSql,
   buildInsertSql,
@@ -80,13 +81,12 @@ export class TableModel {
     changes: Record<string, unknown>,
   ): Promise<WorkspaceDatabaseSqlResponse> {
     const detail = await this.schema();
-    const updatedRow = { ...originalRow, ...changes };
     const sql = buildUpdateSql(
       detail.schema_name,
       detail.table_name,
       detail.columns,
       originalRow,
-      updatedRow,
+      changes,
     );
     return this.raw(sql);
   }
@@ -95,6 +95,7 @@ export class TableModel {
     pk: Record<string, unknown>,
     changes: Record<string, unknown>,
   ): Promise<WorkspaceDatabaseSqlResponse> {
+    await this.assertPrimaryKey(pk);
     return this.update({ ...pk }, changes);
   }
 
@@ -105,10 +106,23 @@ export class TableModel {
   }
 
   async deleteByPk(pk: Record<string, unknown>): Promise<WorkspaceDatabaseSqlResponse> {
+    await this.assertPrimaryKey(pk);
     return this.delete(pk);
   }
 
   raw(sql: string): Promise<WorkspaceDatabaseSqlResponse> {
     return this.client.executeSql(this.databaseId, sql);
+  }
+
+  private async assertPrimaryKey(pk: Record<string, unknown>): Promise<void> {
+    const detail = await this.schema();
+    const keys = detail.columns.filter((column) => column.primary_key).map((column) => column.name);
+    if (keys.length === 0) {
+      throw new DtorchValidationError(`Table '${this.tableName}' has no primary key`);
+    }
+    const missing = keys.filter((key) => pk[key] === undefined);
+    if (missing.length > 0) {
+      throw new DtorchValidationError(`Missing primary key column(s): ${missing.join(", ")}`);
+    }
   }
 }

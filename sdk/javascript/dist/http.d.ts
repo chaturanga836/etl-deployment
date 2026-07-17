@@ -5,6 +5,9 @@ export type RequestAuth = {
     type: "project";
     projectKey: string;
     projectSecret: string;
+} | {
+    type: "apiKey";
+    apiKey: string;
 };
 export type HttpClientOptions = {
     baseUrl: string;

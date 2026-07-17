@@ -8,3 +8,8 @@ config/license-private.pem
 installer/frontend/node_modules/
 installer/frontend/dist/
 installer/frontend/tsconfig.tsbuildinfo
+
+# SDK local dependencies and Python build artifacts
+sdk/javascript/node_modules/
+sdk/python/build/
+sdk/python/*.egg-info/

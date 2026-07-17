@@ -26,13 +26,13 @@ Embed the DT Orch API in your application — no need to clone this repo for ins
 ### Node / React / Angular
 
 ```bash
-npm install @elt/sdk
+npm install @dtorch/sdk
 ```
 
 ```typescript
-import { EltClient } from '@elt/sdk';
+import { DtorchClient } from '@dtorch/sdk';
 
-const client = new EltClient({
+const client = new DtorchClient({
   baseUrl: 'https://api.example.com',
   getAccessToken: () => keycloakToken,
 });
@@ -43,7 +43,7 @@ Package source: [`sdk/javascript/`](sdk/javascript/)
 ### Python
 
 ```bash
-pip install elt-sdk
+pip install dtorch-sdk
 # or from source:
 pip install ./sdk/python
 ```

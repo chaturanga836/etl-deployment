@@ -7,10 +7,7 @@ class EltRuntimeClient {
         this.workspaceId = options.workspaceId;
         this.http = {
             baseUrl: options.baseUrl,
-            auth: {
-                type: "jwt",
-                getAccessToken: () => options.apiKey,
-            },
+            auth: { type: "apiKey", apiKey: options.apiKey },
             timeoutMs: options.timeoutMs ?? 60000,
         };
     }
@@ -22,6 +19,20 @@ class EltRuntimeClient {
     }
     invokeRest(connectionId, body) {
         return (0, http_1.requestJson)(this.http, "POST", `/api/v1/runtime/workspaces/${this.workspaceId}/rest/${connectionId}/invoke`, body ?? {});
+    }
+    /** Push a message (requires `queue:push` scope). */
+    queuePush(queueName, payload) {
+        return (0, http_1.requestJson)(this.http, "POST", `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/push`, { payload: payload ?? {} });
+    }
+    /** Pop oldest message — destructive; returns null when empty (requires `queue:pop` scope). */
+    async queuePop(queueName) {
+        const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/pop`;
+        const result = await (0, http_1.requestJson)(this.http, "POST", url);
+        return result ?? null;
+    }
+    /** Publish realtime notification (requires `notification:publish` scope). */
+    notificationPublish(channel, payload, target) {
+        return (0, http_1.requestJson)(this.http, "POST", `/api/v1/runtime/workspaces/${this.workspaceId}/notifications/publish`, { channel, payload: payload ?? {}, ...(target ? { target } : {}) });
     }
 }
 exports.EltRuntimeClient = EltRuntimeClient;

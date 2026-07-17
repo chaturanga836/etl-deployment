@@ -1,4 +1,5 @@
 import type { WorkspaceDatabaseTableColumn } from "../types/database";
+import { DtorchValidationError } from "../errors";
 
 export function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
@@ -45,6 +46,9 @@ export function buildInsertSql(
 
   const colNames = entries.map(([name]) => quoteIdent(name));
   const values = entries.map(([, value]) => sqlLiteral(value));
+  if (entries.length === 0) {
+    return `INSERT INTO ${tableRef}\nDEFAULT VALUES;`;
+  }
   return `INSERT INTO ${tableRef} (${colNames.join(", ")})\nVALUES (${values.join(", ")});`;
 }
 
@@ -53,19 +57,23 @@ export function buildUpdateSql(
   tableName: string,
   columns: WorkspaceDatabaseTableColumn[],
   originalRow: Record<string, unknown>,
-  updatedRow: Record<string, unknown>,
+  changes: Record<string, unknown>,
 ): string {
   const tableRef = qualifiedTable(schemaName, tableName);
   const pkSet = new Set(primaryKeyColumns(columns));
-  const setParts = columns
-    .filter((col) => !pkSet.has(col.name))
-    .map((col) => {
-      const value = updatedRow[col.name];
-      return `${quoteIdent(col.name)} = ${sqlLiteral(value)}`;
-    });
-  const whereParts = primaryKeyColumns(columns).map(
-    (key) => `${quoteIdent(key)} = ${sqlLiteral(originalRow[key])}`,
-  );
+  const columnSet = new Set(columns.map((column) => column.name));
+  const setParts = Object.entries(changes)
+    .filter(([name]) => columnSet.has(name) && !pkSet.has(name))
+    .map(([name, value]) => `${quoteIdent(name)} = ${sqlLiteral(value)}`);
+  if (setParts.length === 0) {
+    throw new DtorchValidationError("Update requires at least one non-primary-key change");
+  }
+  const whereParts = primaryKeyColumns(columns).map((key) => {
+    if (originalRow[key] === undefined) {
+      throw new DtorchValidationError(`Missing row identity column '${key}'`);
+    }
+    return `${quoteIdent(key)} = ${sqlLiteral(originalRow[key])}`;
+  });
   return `UPDATE ${tableRef}\nSET ${setParts.join(", ")}\nWHERE ${whereParts.join(" AND ")};`;
 }
 
@@ -76,9 +84,12 @@ export function buildDeleteSql(
   row: Record<string, unknown>,
 ): string {
   const tableRef = qualifiedTable(schemaName, tableName);
-  const whereParts = primaryKeyColumns(columns).map(
-    (key) => `${quoteIdent(key)} = ${sqlLiteral(row[key])}`,
-  );
+  const whereParts = primaryKeyColumns(columns).map((key) => {
+    if (row[key] === undefined) {
+      throw new DtorchValidationError(`Missing row identity column '${key}'`);
+    }
+    return `${quoteIdent(key)} = ${sqlLiteral(row[key])}`;
+  });
   return `DELETE FROM ${tableRef}\nWHERE ${whereParts.join(" AND ")};`;
 }
 

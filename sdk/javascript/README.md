@@ -1,17 +1,16 @@
-# @elt/sdk
+# @dtorch/sdk
 
-TypeScript/JavaScript client for the ELT Engine API — studio admin, runtime automation, and workspace database ORM.
+TypeScript/JavaScript SDK for DT Orch — Studio administration, runtime automation, and workspace database ORM. Legacy `Elt*` class names remain exported for compatibility.
 
 ## Install
 
 ```bash
-npm install
-npm run build
+npm install @dtorch/sdk
 ```
 
 ## Admin setup
 
-1. Create a project in the studio UI (or via `EltClient.createProject`).
+1. Create a project in the Studio UI (or via `DtorchClient.createProject`).
 2. Copy the **project key** (`pk_…`) and **project secret** (`ps_…`) from the one-time modal.
 3. Store the secret securely. It is not shown again unless you regenerate in **Project Settings → API credentials**.
 
@@ -20,10 +19,10 @@ npm run build
 For organization admins managing projects, databases, and migrations:
 
 ```typescript
-import { EltClient } from '@elt/sdk';
+import { DtorchClient } from '@dtorch/sdk';
 
-const client = new EltClient({
-  baseUrl: process.env.ELT_API_URL!,
+const client = new DtorchClient({
+  baseUrl: process.env.DTORCH_API_URL!,
   getAccessToken: async () => process.env.DTORCH_ACCESS_TOKEN!,
 });
 
@@ -36,15 +35,17 @@ const project = await client.createProject({ name: 'My App' });
 For customer apps and scripts that read/write workspace database tables:
 
 ```typescript
-import { EltPlatformClient } from '@elt/sdk';
+import { DtorchPlatformClient } from '@dtorch/sdk';
 
-const client = new EltPlatformClient({
+const client = new DtorchPlatformClient({
   baseUrl: process.env.DTORCH_API_URL!,
   projectKey: process.env.DTORCH_PROJECT_KEY!,
   projectSecret: process.env.DTORCH_PROJECT_SECRET!,
   workspaceId: 42,
+  databaseId: 1, // optional default for client.db
 });
 
+await client.validate();
 const users = client.database(1).table('users');
 
 const page = await users.findMany({ limit: 50, offset: 0 });
@@ -74,11 +75,11 @@ const custom = await users.raw('SELECT count(*) FROM "public"."users";');
 For pipeline/workflow execution (separate from project credentials):
 
 ```typescript
-import { EltRuntimeClient } from '@elt/sdk';
+import { DtorchRuntimeClient } from '@dtorch/sdk';
 
-const runtime = new EltRuntimeClient({
-  baseUrl: process.env.ELT_API_URL!,
-  apiKey: process.env.ELT_API_KEY!,
+const runtime = new DtorchRuntimeClient({
+  baseUrl: process.env.DTORCH_API_URL!,
+  apiKey: process.env.DTORCH_API_KEY!,
   workspaceId: 42,
 });
 
@@ -98,18 +99,18 @@ Authorization: Bearer ps_...
 
 - The project secret is hashed server-side and returned in full only on create or regenerate.
 - Regenerating invalidates the previous secret immediately.
-- Project credentials can access database read/write APIs only (`db:read`, `db:write`). DDL, migrations, and provisioning require a user JWT with admin role — use `dtorch db push` or `EltClient` with `DTORCH_ACCESS_TOKEN`.
+- Project credentials can access database read/write APIs only (`db:read`, `db:write`). DDL, migrations, and provisioning require a user JWT with admin role — use `dtorch db push` or `DtorchClient` with `DTORCH_ACCESS_TOKEN`.
 - Use environment variables or a secrets manager — never commit credentials.
 
 ## Errors
 
 ```typescript
-import { EltClientError } from '@elt/sdk';
+import { DtorchApiError } from '@dtorch/sdk';
 
 try {
   await client.executeSql(1, 'SELECT 1');
 } catch (err) {
-  if (err instanceof EltClientError) {
+  if (err instanceof DtorchApiError) {
     console.error(err.statusCode, err.detail);
   }
 }

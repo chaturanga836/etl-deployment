@@ -2,6 +2,8 @@
 
 Dense operational and architectural reference for AI assistants working on **DT Orch** self-hosted deployments. Human-oriented guides: [INSTALL.md](INSTALL.md), [RELEASE.md](RELEASE.md), [CODE_PROTECTION.md](CODE_PROTECTION.md).
 
+For **SDK / CLI / migrations / project credentials**, use the canonical contract: [SDK_MDA.md](SDK_MDA.md).
+
 ---
 
 ## 1. Repository map

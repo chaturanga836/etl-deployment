@@ -1,18 +1,40 @@
-# elt-sdk
+# dtorch-sdk
 
-Python HTTP client for the ELT Engine API.
+Python SDK for DT Orch. It includes Studio, project-credential database ORM, runtime, and realtime clients. Legacy `elt_sdk` and `Elt*` imports remain available.
 
 ```bash
-pip install .
+pip install dtorch-sdk
 ```
 
 ## Studio & workspaces
 
 ```python
-from elt_sdk import EltClient
+from dtorch import DtorchClient
 
-client = EltClient("https://api.example.com", get_access_token=lambda: "...")
+client = DtorchClient("https://api.example.com", get_access_token=lambda: "...")
 projects = client.list_projects()
+```
+
+## Platform database client
+
+Use the project key and one-time project secret generated in DT Orch Studio:
+
+```python
+import os
+from dtorch import DtorchPlatformClient
+
+client = DtorchPlatformClient(
+    os.environ["DTORCH_API_URL"],
+    project_key=os.environ["DTORCH_PROJECT_KEY"],
+    project_secret=os.environ["DTORCH_PROJECT_SECRET"],
+    workspace_id=42,
+    database_id=1,
+)
+
+client.validate()
+users = client.db.table("users")
+users.insert({"email": "ada@example.com"})
+users.update_by_pk({"id": 1}, {"name": "Ada Lovelace"})
 ```
 
 ## Database migrations
@@ -21,11 +43,11 @@ Requires a bearer token with `workspace_admin` on the target workspace.
 
 ```python
 import os
-from elt_sdk import EltClient
+from dtorch import DtorchClient
 
-client = EltClient(
+client = DtorchClient(
     "https://api.example.com",
-    get_access_token=lambda: os.environ["ELT_ACCESS_TOKEN"],
+    get_access_token=lambda: os.environ["DTORCH_ACCESS_TOKEN"],
 )
 
 # List applied migrations on a workspace database

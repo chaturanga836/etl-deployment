@@ -23,4 +23,5 @@ export declare class TableModel {
     delete(row: Record<string, unknown>): Promise<WorkspaceDatabaseSqlResponse>;
     deleteByPk(pk: Record<string, unknown>): Promise<WorkspaceDatabaseSqlResponse>;
     raw(sql: string): Promise<WorkspaceDatabaseSqlResponse>;
+    private assertPrimaryKey;
 }

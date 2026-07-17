@@ -133,3 +133,7 @@ class EltRuntimeClient:
             f"/api/v1/runtime/workspaces/{self._workspace_id}/notifications/publish",
             json=body,
         )
+
+
+# Keep direct ``elt_sdk.runtime_client`` imports on the canonical implementation.
+from dtorch.runtime_client import DtorchRuntimeClient as EltRuntimeClient  # noqa: E402,F401,F811

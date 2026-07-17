@@ -1,7 +1,7 @@
 {
-  "name": "@elt/sdk",
-  "version": "0.2.0",
-  "description": "HTTP client and ORM for the ELT Engine API",
+  "name": "@dtorch/sdk",
+  "version": "0.3.0",
+  "description": "TypeScript and JavaScript SDK for the DT Orch platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.js",
     "prepublishOnly": "npm run build"
   },
   "files": ["dist"],

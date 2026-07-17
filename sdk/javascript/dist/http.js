@@ -11,6 +11,9 @@ async function requestJson(options, method, path, body) {
         headers["X-Project-Key"] = options.auth.projectKey;
         headers.Authorization = `Bearer ${options.auth.projectSecret}`;
     }
+    else if (options.auth.type === "apiKey") {
+        headers.Authorization = `Bearer ${options.auth.apiKey}`;
+    }
     else if (options.auth.getAccessToken) {
         const token = await options.auth.getAccessToken();
         if (token) {
@@ -36,7 +39,16 @@ async function requestJson(options, method, path, body) {
             catch {
                 // keep raw text
             }
-            throw new errors_1.EltClientError(`ELT API ${method} ${path} failed (${res.status})`, res.status, detail);
+            const ErrorType = res.status === 401 || res.status === 403
+                ? errors_1.DtorchAuthError
+                : errors_1.DtorchApiError;
+            const authMessage = options.auth.type === "project"
+                ? "DT Orch authentication failed; verify or regenerate your project credentials in Studio"
+                : "DT Orch authentication or authorization failed; verify the token and required scopes or roles";
+            const message = res.status === 401 || res.status === 403
+                ? authMessage
+                : `DT Orch API ${method} ${path} failed (${res.status})`;
+            throw new ErrorType(message, res.status, detail);
         }
         if (res.status === 204) {
             return undefined;
