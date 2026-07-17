@@ -1,11 +1,15 @@
 import { requestJson, type HttpClientOptions } from "./http";
 
-export type EltRuntimeClientOptions = {
+type RuntimeClientBaseOptions = {
   baseUrl: string;
-  apiKey: string;
   workspaceId: number;
   timeoutMs?: number;
 };
+
+export type EltRuntimeClientOptions = RuntimeClientBaseOptions & (
+  | { projectKey: string; projectSecret: string; apiKey?: never }
+  | { apiKey: string; projectKey?: never; projectSecret?: never }
+);
 
 export class EltRuntimeClient {
   private http: HttpClientOptions;
@@ -15,7 +19,13 @@ export class EltRuntimeClient {
     this.workspaceId = options.workspaceId;
     this.http = {
       baseUrl: options.baseUrl,
-      auth: { type: "apiKey", apiKey: options.apiKey },
+      auth: "projectKey" in options && options.projectKey !== undefined
+        ? {
+            type: "project",
+            projectKey: options.projectKey,
+            projectSecret: options.projectSecret,
+          }
+        : { type: "apiKey", apiKey: options.apiKey },
       timeoutMs: options.timeoutMs ?? 60_000,
     };
   }
@@ -75,6 +85,17 @@ export class EltRuntimeClient {
     const result = await requestJson<{ id: number; payload: unknown; created_at?: string } | undefined>(
       this.http,
       "POST",
+      url,
+    );
+    return result ?? null;
+  }
+
+  /** Peek at the oldest message without removing it (requires `queue:read` scope). */
+  async queuePeek(queueName: string) {
+    const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/peek`;
+    const result = await requestJson<{ id: number; payload: unknown; created_at?: string } | undefined>(
+      this.http,
+      "GET",
       url,
     );
     return result ?? null;

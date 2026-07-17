@@ -7,7 +7,13 @@ class EltRuntimeClient {
         this.workspaceId = options.workspaceId;
         this.http = {
             baseUrl: options.baseUrl,
-            auth: { type: "apiKey", apiKey: options.apiKey },
+            auth: "projectKey" in options && options.projectKey !== undefined
+                ? {
+                    type: "project",
+                    projectKey: options.projectKey,
+                    projectSecret: options.projectSecret,
+                }
+                : { type: "apiKey", apiKey: options.apiKey },
             timeoutMs: options.timeoutMs ?? 60000,
         };
     }
@@ -28,6 +34,12 @@ class EltRuntimeClient {
     async queuePop(queueName) {
         const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/pop`;
         const result = await (0, http_1.requestJson)(this.http, "POST", url);
+        return result ?? null;
+    }
+    /** Peek at the oldest message without removing it (requires `queue:read` scope). */
+    async queuePeek(queueName) {
+        const url = `/api/v1/runtime/workspaces/${this.workspaceId}/queues/${encodeURIComponent(queueName)}/peek`;
+        const result = await (0, http_1.requestJson)(this.http, "GET", url);
         return result ?? null;
     }
     /** Publish realtime notification (requires `notification:publish` scope). */

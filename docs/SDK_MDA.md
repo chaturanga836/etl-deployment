@@ -86,11 +86,13 @@ SDK install via CLI is optional convenience; package managers remain authoritati
 
 ## 4. Authentication model
 
-Three first-party auth modes. SDKs must not conflate them.
+Three first-party auth modes. SDKs must not conflate them. Customer apps use
+project credentials only; Keycloak is DT Orch Studio identity, not customer-app identity.
 
 ### 4.1 Project credentials (app ↔ platform)
 
-**Use for:** application runtime DML against workspace DBs and other project-scoped service APIs.  
+**Use for:** every customer-app operation: database DML, object storage,
+notification publish/realtime subscribe, queues, and pipeline/workflow/REST runtime.
 **Issued by:** Studio UI (project create / Project Settings → credentials).  
 **Shape:**
 
@@ -104,7 +106,9 @@ X-Project-Key: pk_...
 Authorization: Bearer ps_...
 ```
 
-**Scopes (current platform default):** `db:read`, `db:write`.
+**Scopes (current platform default):** `db:read`, `db:write`, `storage:read`,
+`storage:write`, `notification:publish`, `notification:subscribe`, `queue:push`,
+`queue:pop`, `queue:read`, `pipeline:run`, `workflow:run`, `rest:invoke`.
 
 **Must not allow:** DDL, migrations apply, database provisioning, org/workspace admin. Those require user JWT (§4.2).
 
@@ -124,7 +128,7 @@ Env vars:
 | `DTORCH_WORKSPACE_ID` | Numeric workspace / project id |
 | `DTORCH_DATABASE_ID` | Optional default database id |
 
-### 4.2 User JWT (Studio / admin / migrations)
+### 4.2 User JWT (Studio operators only)
 
 **Use for:** Studio operations, provisioning, DDL, **migration apply**, credential rotation APIs.  
 **Source:** Keycloak OIDC (`workspace-realm`).  
@@ -132,12 +136,17 @@ Env vars:
 **Env:** `DTORCH_ACCESS_TOKEN` (alias `ELT_ACCESS_TOKEN`).  
 **Role for migrations:** `workspace_admin` (or equivalent) on target workspace.
 
+Customer/end-user apps **must not connect to Keycloak**. Keycloak represents DT Orch
+Studio users (super admins, developers, managers, and admins), not users of customer apps.
+A future customer-facing auth integration service is planned but does not exist today.
+
 ### 4.3 Workspace API keys (runtime automation)
 
-**Use for:** pipeline/workflow run, queue push/pop, notification publish, REST invoke.  
+**Use for:** backward compatibility with existing runtime automation.
 **Header:** `Authorization: Bearer elt_…` or `X-API-Key: elt_…`  
 **Client:** Runtime client namespace (`client.runtime` / `DtorchRuntimeClient`).  
-**Do not** use project key/secret for these endpoints unless the platform later unifies scopes.
+New customer apps use project key/secret for runtime endpoints. Do not require a
+separate workspace API key in new app integrations.
 
 ### 4.4 Connection validation
 
@@ -163,8 +172,8 @@ Behavior:
 |--------|------|----------------|
 | `DtorchClient` (Studio) | JWT | Projects, members, provision, migrations apply, Studio APIs |
 | `DtorchPlatformClient` | Project key + secret | App access to enabled services |
-| `DtorchRuntimeClient` | Workspace API key | Pipelines, workflows, queues, notifications invoke |
-| `DtorchRealtimeClient` | JWT or realtime token | Centrifugo subscriptions |
+| `DtorchRuntimeClient` | Project credentials; legacy workspace API key | Pipelines, workflows, queues, notifications invoke |
+| `DtorchRealtimeClient` | Project credentials (apps); JWT (Studio) | Centrifugo subscriptions |
 
 Legacy names (`EltClient`, `EltPlatformClient`, …) are aliases.
 
@@ -175,10 +184,10 @@ Legacy names (`EltClient`, `EltPlatformClient`, …) are aliases.
 | Namespace | Catalog key | Capability | Auth |
 |-----------|-------------|------------|------|
 | `client.db` / `client.database(id)` | `postgres` (+ future `mysql`) | Table ORM, SQL DML, schema introspection | Project credentials |
-| `client.storage` | `minio` | Object put/get/list/delete, signed URLs | Project credentials (when API supports) |
-| `client.realtime` | `centrifugo` | Publish/subscribe helpers | Project or realtime token |
-| `client.queue` | `redis` / `rabbitmq` | Enqueue / dequeue / peek | Prefer runtime key; document if project scopes expand |
-| `client.runtime` | n/a | Run pipeline/workflow | Runtime API key (or dedicated runtime client) |
+| `client.storage` | `minio` | Object put/list/delete via platform API | Project credentials |
+| `client.realtime` | `centrifugo` | Subscribe helpers; publish through runtime | Project credentials |
+| `client.runtime.queue*` | `redis` / `rabbitmq` | Enqueue / dequeue / peek | Project credentials |
+| `client.runtime` | n/a | Run pipeline/workflow/REST; publish notifications | Project credentials |
 
 **Module layout (TypeScript target):**
 
@@ -422,6 +431,7 @@ Every language SDK **must** eventually support the same capability set. Gaps are
 
 **Current known gaps (implement toward parity):**
 
+- Python SDK: add project-credential storage, realtime, queue, and runtime namespaces
 - PHP SDK: expand beyond Studio client to platform + runtime + migrations helpers
 - CLI: add `db down`, `auth check`, `sdk install`; publish npm + Composer wrappers; keep Python CLI as reference implementation
 
@@ -468,7 +478,8 @@ Shared concepts (names adapt to language idioms):
 2. Secret shown only once in Studio; SDKs must not assume secret retrieval APIs exist.
 3. Regeneration invalidates old secret immediately — document in READMEs.
 4. Prefer env / secret managers over `config.toml` for secrets.
-5. Project credentials are least-privilege (`db:read`/`db:write`); do not widen scopes in SDK clients without platform change.
+5. Project credentials are workspace-scoped and cover all customer app services;
+   SDK clients must not ask customer apps for Keycloak JWTs or separate runtime keys.
 6. Migration apply remains JWT-admin only.
 
 ---
@@ -485,6 +496,9 @@ When adding or changing SDK/CLI code:
 6. Update language README + this MDA if you change contracts.
 7. Add parity notes to §9 when a language still lags.
 8. Do not invent a fourth auth mode without updating §4 and backend auth services.
+9. Do not add Keycloak login/token handling to customer apps or app-facing examples.
+10. Cron/Celery Beat and customer-facing auth services are not implemented; do not
+    invent those APIs.
 
 ---
 

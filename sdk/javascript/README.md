@@ -30,9 +30,10 @@ const project = await client.createProject({ name: 'My App' });
 // project.credentials contains client_key + client_secret (once)
 ```
 
-## Platform client + ORM (project key + secret)
+## Customer app client (project key + secret)
 
-For customer apps and scripts that read/write workspace database tables:
+Customer apps use one client and one credential pair for every provisioned app service.
+They do not connect to Keycloak.
 
 ```typescript
 import { DtorchPlatformClient } from '@dtorch/sdk';
@@ -55,6 +56,22 @@ await users.deleteByPk({ id: 1 });
 
 const matches = await users.findWhere({ email: 'ada@example.com' });
 const custom = await users.raw('SELECT count(*) FROM "public"."users";');
+
+// Managed MinIO storage
+await client.storage.uploadObject(
+  new Blob(['hello'], { type: 'text/plain' }),
+  { key: 'demo/hello.txt' },
+);
+const objects = await client.storage.listObjects('demo/');
+
+// Runtime services use the same project credentials
+await client.runtime.queuePush('events', { type: 'demo.created' });
+await client.runtime.notificationPublish('demo', { message: 'Created' });
+await client.runtime.runPipeline('pipeline-uuid', { foo: 'bar' });
+
+// Realtime token minting also uses the same project credentials
+await client.realtime.connect();
+client.realtime.subscribe('org:1:ws:42:channel:demo', console.log);
 ```
 
 ### ORM methods
@@ -70,9 +87,10 @@ const custom = await users.raw('SELECT count(*) FROM "public"."users";');
 | `delete(row)` | `DELETE` by primary key |
 | `raw(sql)` | Execute DML SQL directly |
 
-## Runtime client (API key)
+## Legacy runtime API keys
 
-For pipeline/workflow execution (separate from project credentials):
+`DtorchRuntimeClient` still accepts a workspace API key for existing integrations.
+New customer apps should use `DtorchPlatformClient.runtime` with project credentials.
 
 ```typescript
 import { DtorchRuntimeClient } from '@dtorch/sdk';
@@ -99,7 +117,9 @@ Authorization: Bearer ps_...
 
 - The project secret is hashed server-side and returned in full only on create or regenerate.
 - Regenerating invalidates the previous secret immediately.
-- Project credentials can access database read/write APIs only (`db:read`, `db:write`). DDL, migrations, and provisioning require a user JWT with admin role — use `dtorch db push` or `DtorchClient` with `DTORCH_ACCESS_TOKEN`.
+- Project credentials cover customer app services: database DML, storage objects, notifications/realtime, queues, and runtime invocation.
+- Customer apps must not connect to Keycloak. Keycloak JWT is for DT Orch Studio operators only.
+- DDL, migrations, provisioning, and credential rotation remain Studio/operator operations.
 - Use environment variables or a secrets manager — never commit credentials.
 
 ## Errors

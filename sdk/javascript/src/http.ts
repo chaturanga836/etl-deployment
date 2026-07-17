@@ -18,9 +18,11 @@ export async function requestJson<T>(
   body?: unknown,
 ): Promise<T> {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (options.auth.type === "project") {
     headers["X-Project-Key"] = options.auth.projectKey;
@@ -42,7 +44,9 @@ export async function requestJson<T>(
     const res = await fetch(`${baseUrl}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined
+        ? (isFormData ? body as FormData : JSON.stringify(body))
+        : undefined,
       signal: controller.signal,
     });
 

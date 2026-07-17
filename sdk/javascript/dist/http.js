@@ -4,9 +4,11 @@ exports.requestJson = requestJson;
 const errors_1 = require("./errors");
 async function requestJson(options, method, path, body) {
     const baseUrl = options.baseUrl.replace(/\/$/, "");
-    const headers = {
-        "Content-Type": "application/json",
-    };
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    const headers = {};
+    if (!isFormData) {
+        headers["Content-Type"] = "application/json";
+    }
     if (options.auth.type === "project") {
         headers["X-Project-Key"] = options.auth.projectKey;
         headers.Authorization = `Bearer ${options.auth.projectSecret}`;
@@ -27,7 +29,9 @@ async function requestJson(options, method, path, body) {
         const res = await fetch(`${baseUrl}${path}`, {
             method,
             headers,
-            body: body !== undefined ? JSON.stringify(body) : undefined,
+            body: body !== undefined
+                ? (isFormData ? body : JSON.stringify(body))
+                : undefined,
             signal: controller.signal,
         });
         if (!res.ok) {

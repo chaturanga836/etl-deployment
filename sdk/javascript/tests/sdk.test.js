@@ -20,9 +20,16 @@ function response(status, body) {
 }
 
 test("platform validate sends project credentials", async () => {
-  let request;
+  const requests = [];
   global.fetch = async (url, init) => {
-    request = { url, init };
+    requests.push({ url, init });
+    if (url.endsWith("/project/validate")) {
+      return response(200, {
+        ok: true,
+        workspace_id: 42,
+        scopes: ["db:read", "storage:read"],
+      });
+    }
     return response(200, { databases: [], has_databases: false });
   };
 
@@ -36,11 +43,42 @@ test("platform validate sends project credentials", async () => {
   assert.deepEqual(await client.validate(), {
     ok: true,
     workspaceId: 42,
+    scopes: ["db:read", "storage:read"],
     databases: [],
   });
-  assert.equal(request.url, "https://dtorch.example/api/v1/workspaces/42/databases");
-  assert.equal(request.init.headers["X-Project-Key"], "pk_test");
-  assert.equal(request.init.headers.Authorization, "Bearer ps_test");
+  assert.equal(requests.length, 2);
+  for (const request of requests) {
+    assert.equal(request.init.headers["X-Project-Key"], "pk_test");
+    assert.equal(request.init.headers.Authorization, "Bearer ps_test");
+  }
+});
+
+test("platform storage and runtime use the same project credentials", async () => {
+  const requests = [];
+  global.fetch = async (url, init) => {
+    requests.push({ url, init });
+    if (url.includes("/storage/objects")) {
+      return response(200, { items: [], prefix: "demo/" });
+    }
+    return response(201, { id: 1, payload: { hello: "world" } });
+  };
+
+  const client = new DtorchPlatformClient({
+    baseUrl: "https://dtorch.example",
+    projectKey: "pk_test",
+    projectSecret: "ps_test",
+    workspaceId: 42,
+  });
+
+  await client.storage.listObjects("demo/");
+  await client.runtime.queuePush("events", { hello: "world" });
+
+  assert.match(requests[0].url, /storage\/objects\?prefix=demo%2F$/);
+  assert.match(requests[1].url, /runtime\/workspaces\/42\/queues\/events\/push$/);
+  for (const request of requests) {
+    assert.equal(request.init.headers["X-Project-Key"], "pk_test");
+    assert.equal(request.init.headers.Authorization, "Bearer ps_test");
+  }
 });
 
 test("updateByPk updates only supplied columns", async () => {

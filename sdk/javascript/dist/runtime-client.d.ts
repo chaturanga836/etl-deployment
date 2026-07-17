@@ -1,9 +1,17 @@
-export type EltRuntimeClientOptions = {
+type RuntimeClientBaseOptions = {
     baseUrl: string;
-    apiKey: string;
     workspaceId: number;
     timeoutMs?: number;
 };
+export type EltRuntimeClientOptions = RuntimeClientBaseOptions & ({
+    projectKey: string;
+    projectSecret: string;
+    apiKey?: never;
+} | {
+    apiKey: string;
+    projectKey?: never;
+    projectSecret?: never;
+});
 export declare class EltRuntimeClient {
     private http;
     private workspaceId;
@@ -38,6 +46,12 @@ export declare class EltRuntimeClient {
         payload: unknown;
         created_at?: string;
     } | null>;
+    /** Peek at the oldest message without removing it (requires `queue:read` scope). */
+    queuePeek(queueName: string): Promise<{
+        id: number;
+        payload: unknown;
+        created_at?: string;
+    } | null>;
     /** Publish realtime notification (requires `notification:publish` scope). */
     notificationPublish(channel: string, payload?: Record<string, unknown>, target?: Record<string, unknown>): Promise<{
         channel: string;
@@ -45,3 +59,4 @@ export declare class EltRuntimeClient {
         published: boolean;
     }>;
 }
+export {};

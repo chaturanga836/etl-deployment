@@ -1,32 +1,56 @@
 import { Centrifuge, type Subscription } from "centrifuge";
 import { requestJson, type HttpClientOptions } from "./http";
 
-export type EltRealtimeClientOptions = {
+type RealtimeClientBaseOptions = {
   baseUrl: string;
-  getAccessToken: () => Promise<string | null> | string | null;
   timeoutMs?: number;
 };
+
+export type EltRealtimeClientOptions = RealtimeClientBaseOptions & (
+  | {
+      projectKey: string;
+      projectSecret: string;
+      workspaceId: number;
+      getAccessToken?: never;
+    }
+  | {
+      getAccessToken: () => Promise<string | null> | string | null;
+      projectKey?: never;
+      projectSecret?: never;
+      workspaceId?: never;
+    }
+);
 
 type EventHandler = (...args: unknown[]) => void;
 
 export class EltRealtimeClient {
   private http: HttpClientOptions;
+  private tokenPath: string;
   private centrifuge: Centrifuge | null = null;
   private subscriptions = new Map<string, Subscription>();
 
   constructor(options: EltRealtimeClientOptions) {
     this.http = {
       baseUrl: options.baseUrl,
-      auth: { type: "jwt", getAccessToken: options.getAccessToken },
+      auth: "projectKey" in options && options.projectKey !== undefined
+        ? {
+            type: "project",
+            projectKey: options.projectKey,
+            projectSecret: options.projectSecret,
+          }
+        : { type: "jwt", getAccessToken: options.getAccessToken },
       timeoutMs: options.timeoutMs ?? 60_000,
     };
+    this.tokenPath = "projectKey" in options && options.projectKey !== undefined
+      ? `/api/v1/workspaces/${options.workspaceId}/notifications/realtime-token`
+      : "/api/v1/notifications/realtime-token";
   }
 
   async connect(): Promise<void> {
     const tokenRes = await requestJson<{ token: string; ws_url: string }>(
       this.http,
       "GET",
-      "/api/v1/notifications/realtime-token",
+      this.tokenPath,
     );
     this.centrifuge = new Centrifuge(tokenRes.ws_url, { token: tokenRes.token });
     this.centrifuge.connect();

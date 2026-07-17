@@ -1,11 +1,22 @@
-export type EltRealtimeClientOptions = {
+type RealtimeClientBaseOptions = {
     baseUrl: string;
-    getAccessToken: () => Promise<string | null> | string | null;
     timeoutMs?: number;
 };
+export type EltRealtimeClientOptions = RealtimeClientBaseOptions & ({
+    projectKey: string;
+    projectSecret: string;
+    workspaceId: number;
+    getAccessToken?: never;
+} | {
+    getAccessToken: () => Promise<string | null> | string | null;
+    projectKey?: never;
+    projectSecret?: never;
+    workspaceId?: never;
+});
 type EventHandler = (...args: unknown[]) => void;
 export declare class EltRealtimeClient {
     private http;
+    private tokenPath;
     private centrifuge;
     private subscriptions;
     constructor(options: EltRealtimeClientOptions);

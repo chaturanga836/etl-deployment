@@ -9,12 +9,21 @@ class EltRealtimeClient {
         this.subscriptions = new Map();
         this.http = {
             baseUrl: options.baseUrl,
-            auth: { type: "jwt", getAccessToken: options.getAccessToken },
+            auth: "projectKey" in options && options.projectKey !== undefined
+                ? {
+                    type: "project",
+                    projectKey: options.projectKey,
+                    projectSecret: options.projectSecret,
+                }
+                : { type: "jwt", getAccessToken: options.getAccessToken },
             timeoutMs: options.timeoutMs ?? 60000,
         };
+        this.tokenPath = "projectKey" in options && options.projectKey !== undefined
+            ? `/api/v1/workspaces/${options.workspaceId}/notifications/realtime-token`
+            : "/api/v1/notifications/realtime-token";
     }
     async connect() {
-        const tokenRes = await (0, http_1.requestJson)(this.http, "GET", "/api/v1/notifications/realtime-token");
+        const tokenRes = await (0, http_1.requestJson)(this.http, "GET", this.tokenPath);
         this.centrifuge = new centrifuge_1.Centrifuge(tokenRes.ws_url, { token: tokenRes.token });
         this.centrifuge.connect();
     }

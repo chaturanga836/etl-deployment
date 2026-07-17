@@ -373,6 +373,26 @@ git pull   # VERSION / IMAGE_TAG updated
 
 ## 11. AI agent guidelines
 
+### Mandatory authentication boundary
+
+- **Keycloak is only the identity provider for DT Orch Studio UI.** It authenticates
+  super admins, developers, managers, and admins who manage the platform.
+- **Customer/end-user apps never connect to Keycloak.** Do not add Keycloak login,
+  token refresh, or JWT handling to customer apps, demos, or app-facing SDK examples.
+- Studio project creation issues a project key (`pk_…`) and project secret (`ps_…`).
+  Customer apps use that pair for every provisioned app service: database DML, MinIO
+  objects, notification publishing, realtime subscriptions, queues, and
+  pipeline/workflow/REST runtime invocation.
+- Do not require a separate workspace API key for new customer app integrations.
+  Workspace API keys are retained only for backward compatibility.
+- Keycloak JWT remains appropriate for Studio/operator actions: org/workspace
+  administration, provisioning, migrations/DDL, and project credential rotation.
+- A customer-facing auth service for end-user integrations is planned but does not
+  exist yet. Do not invent or imply that API.
+- Celery workers support immediate execution; cron/Celery Beat scheduling is not
+  implemented yet. Do not invent schedule endpoints.
+- [SDK_MDA.md](SDK_MDA.md) is the detailed SDK and credential contract.
+
 ### Do
 
 - Prefer **wizard** (`setup-ui.sh`) for customer first-time install

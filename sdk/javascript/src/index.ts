@@ -30,6 +30,8 @@ export {
   EltPlatformClient as DtorchPlatformClient,
   type EltPlatformClientOptions,
   type EltPlatformClientOptions as DtorchPlatformClientOptions,
+  type StorageObjectItem,
+  type WorkspaceStorageStatus,
 } from "./platform-client";
 export { DatabaseContext } from "./database/database-context";
 export { TableModel, type FindManyOptions } from "./database/table-model";

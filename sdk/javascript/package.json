@@ -1,6 +1,6 @@
 {
   "name": "@dtorch/sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TypeScript and JavaScript SDK for the DT Orch platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,9 @@
     "test": "npm run build && node --test tests/*.test.js",
     "prepublishOnly": "npm run build"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "dependencies": {
     "centrifuge": "^5.2.2"
