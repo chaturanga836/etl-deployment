@@ -1,6 +1,6 @@
 import { requestJson, type HttpClientOptions } from "./http";
 import { DatabaseContext } from "./database/database-context";
-import { DtorchValidationError } from "./errors";
+import { DtorchApiError, DtorchValidationError } from "./errors";
 import { EltRealtimeClient } from "./realtime-client";
 import { EltRuntimeClient } from "./runtime-client";
 import type {
@@ -109,20 +109,35 @@ export class EltPlatformClient {
 
   /** Validate project credentials against the linked workspace. */
   async validate() {
-    const [validation, databases] = await Promise.all([
-      requestJson<{ ok: true; workspace_id: number; scopes: string[] }>(
+    const databases = await this.listDatabases();
+    try {
+      const validation = await requestJson<{
+        ok: true;
+        workspace_id: number;
+        scopes: string[];
+      }>(
         this.http,
         "GET",
         `/api/v1/workspaces/${this.workspaceId}/project/validate`,
-      ),
-      this.listDatabases(),
-    ]);
-    return {
-      ok: validation.ok,
-      workspaceId: validation.workspace_id,
-      scopes: validation.scopes,
-      databases: databases.databases,
-    };
+      );
+      return {
+        ok: validation.ok,
+        workspaceId: validation.workspace_id,
+        scopes: validation.scopes,
+        databases: databases.databases,
+      };
+    } catch (err) {
+      // Older platform builds may not expose /project/validate yet.
+      if (err instanceof DtorchApiError && err.statusCode === 404) {
+        return {
+          ok: true as const,
+          workspaceId: this.workspaceId,
+          scopes: [] as string[],
+          databases: databases.databases,
+        };
+      }
+      throw err;
+    }
   }
 
   listDatabases() {

@@ -52,16 +52,28 @@ class EltPlatformClient {
     }
     /** Validate project credentials against the linked workspace. */
     async validate() {
-        const [validation, databases] = await Promise.all([
-            (0, http_1.requestJson)(this.http, "GET", `/api/v1/workspaces/${this.workspaceId}/project/validate`),
-            this.listDatabases(),
-        ]);
-        return {
-            ok: validation.ok,
-            workspaceId: validation.workspace_id,
-            scopes: validation.scopes,
-            databases: databases.databases,
-        };
+        const databases = await this.listDatabases();
+        try {
+            const validation = await (0, http_1.requestJson)(this.http, "GET", `/api/v1/workspaces/${this.workspaceId}/project/validate`);
+            return {
+                ok: validation.ok,
+                workspaceId: validation.workspace_id,
+                scopes: validation.scopes,
+                databases: databases.databases,
+            };
+        }
+        catch (err) {
+            // Older platform builds may not expose /project/validate yet.
+            if (err instanceof errors_1.DtorchApiError && err.statusCode === 404) {
+                return {
+                    ok: true,
+                    workspaceId: this.workspaceId,
+                    scopes: [],
+                    databases: databases.databases,
+                };
+            }
+            throw err;
+        }
     }
     listDatabases() {
         return (0, http_1.requestJson)(this.http, "GET", `/api/v1/workspaces/${this.workspaceId}/databases`);

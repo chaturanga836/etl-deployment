@@ -47,10 +47,35 @@ test("platform validate sends project credentials", async () => {
     databases: [],
   });
   assert.equal(requests.length, 2);
+  assert.match(requests[0].url, /\/databases$/);
+  assert.match(requests[1].url, /\/project\/validate$/);
   for (const request of requests) {
     assert.equal(request.init.headers["X-Project-Key"], "pk_test");
     assert.equal(request.init.headers.Authorization, "Bearer ps_test");
   }
+});
+
+test("platform validate falls back when project/validate is missing", async () => {
+  global.fetch = async (url) => {
+    if (String(url).endsWith("/project/validate")) {
+      return response(404, { detail: "Not Found" });
+    }
+    return response(200, { databases: [{ id: 1, name: "main" }], has_databases: true });
+  };
+
+  const client = new DtorchPlatformClient({
+    baseUrl: "https://dtorch.example",
+    projectKey: "pk_test",
+    projectSecret: "ps_test",
+    workspaceId: 42,
+  });
+
+  assert.deepEqual(await client.validate(), {
+    ok: true,
+    workspaceId: 42,
+    scopes: [],
+    databases: [{ id: 1, name: "main" }],
+  });
 });
 
 test("platform storage and runtime use the same project credentials", async () => {
