@@ -26,6 +26,18 @@ ghcr.io/chaturanga836/dt-orch-scraper:vX.Y.Z
 
 Release API images are built with `SOURCE_PROTECTION=1` (Cython + source strip). See [CODE_PROTECTION.md](CODE_PROTECTION.md).
 
+### Customer / EC2 host: `etl-deployment` only
+
+**On install and upgrade hosts, clone only `etl-deployment`.** Never clone `etl-back`, `elt-frontend`, or `platform-infra-repo` on the server. Those repos stay on developer machines and CI; customers pull **public GHCR images** only.
+
+| Need | Correct action on the host |
+|------|----------------------------|
+| First install | `./scripts/fresh-install.sh --yes` → wizard at `:3000` |
+| New API / UI / infra fix | Release publishes `vX.Y.Z` → `git pull` → `./scripts/upgrade.sh full` |
+| Broken platform | `./scripts/fresh-install.sh --yes` (not mid-flight source rebuilds) |
+
+**Do not** tell users to `git clone …/etl-back` or run `rebuild-api-from-source.sh` / `rebuild-frontend-from-source.sh` on a customer host. Those scripts are **dev/vendor only** (sibling checkouts on a build machine). If the fix is not in GHCR yet, cut a **platform release** first, then upgrade — do not work around by cloning app source onto the server.
+
 ---
 
 ## 2. Installation paths (do not confuse them)
@@ -354,20 +366,27 @@ git pull
 ### Pull latest images after tag bump
 
 ```bash
-git pull   # VERSION / IMAGE_TAG updated
-./scripts/setup-ui.sh   # or ./scripts/install.sh full
+cd ~/etl-deployment
+git pull
+./scripts/upgrade.sh full
 ```
+
+`upgrade.sh` syncs `IMAGE_TAG` from `VERSION`, pulls GHCR images, and recreates services. Prefer this over `setup-ui.sh` / reinstall when only images changed.
+
+**`ENV_FILE` must be absolute.** Compose resolves `env_file:` relative to `compose/`, so `ENV_FILE=.env` wrongly looks for `compose/.env`. `upgrade.sh` resolves the installer `.env` (state dir / volume / repo) to an absolute path before `docker compose`.
 
 ---
 
 ## 10. Release workflow (for agents changing versions)
 
-1. Fix/merge in **etl-back** (and other app repos)
+1. Fix/merge in **etl-back** (and other app repos) on a **dev machine / CI** — never on the customer host
 2. Tag app repos `vX.Y.Z`; CI builds images with `SOURCE_PROTECTION=1`
-3. Update **etl-deployment** `VERSION` (`platform`, `IMAGE_TAG`)
-4. Customer `git pull` + reinstall / wizard redeploy
+3. Update **etl-deployment** `VERSION` (`platform`, `IMAGE_TAG`) / run platform-release workflow
+4. Customer host (etl-deployment only): `git pull` + `./scripts/upgrade.sh full`
 
 **Breaking API fixes require a new image tag** — editing source locally does not affect running `ghcr.io/.../dt-orch-api:v1.0.0`.
+
+**Agent anti-pattern:** answering “API on the server is old” with “clone etl-back and `rebuild-api-from-source.sh`”. Correct answer: publish a new GHCR tag, then `upgrade.sh` on the host.
 
 ---
 
@@ -406,7 +425,9 @@ git pull   # VERSION / IMAGE_TAG updated
 ### Do not
 
 - Assume `./scripts/install.sh` alone replaces the wizard for greenfield setup
-- **Suggest manual host-side or mid-install quick fixes** — no `pip install`, `bootstrap-*.py`, `rebuild-frontend-from-source.sh`, or hand-edited `.env` on customer hosts; use **`./scripts/fresh-install.sh --yes`** and the Install UI after fixing code
+- **Clone or suggest cloning `etl-back` / `elt-frontend` / `platform-infra-repo` on a customer or EC2 install host** — only `etl-deployment` belongs there; app code ships as GHCR images
+- **Suggest `rebuild-api-from-source.sh` or `rebuild-frontend-from-source.sh` on customer hosts** — those need sibling source checkouts (dev/vendor only); production uses `./scripts/upgrade.sh full` after a release
+- **Suggest manual host-side or mid-install quick fixes** — no `pip install`, `bootstrap-*.py`, or hand-edited `.env` on customer hosts; use **`./scripts/fresh-install.sh --yes`** and the Install UI after fixing code
 - Use `[[ -d "$host_path" ]]` inside installer container to validate host paths
 - Commit `license-private.pem`
 - Put instance methods on `BaseSettings` in Cythonized `etl-back` packages
