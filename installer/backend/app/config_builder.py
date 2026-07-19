@@ -7,8 +7,16 @@ from typing import Any
 
 def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
     mode = wizard.get("deployment_mode", "monolith")
-    db = wizard.get("database", {})
-    source = db.get("source", "bundled")
+    # Platform Postgres is always auto-bundled (hidden from installer UI).
+    db = dict(wizard.get("database") or {})
+    db["source"] = "bundled"
+    db["host"] = (db.get("host") or "").strip() or "postgres"
+    db["port"] = int(db.get("port") or 5432)
+    db["user"] = db.get("user") or "elt"
+    db["metadata_db_name"] = db.get("metadata_db_name") or "dtorc_metadata"
+    db["workspace_db_name"] = db.get("workspace_db_name") or "dtorc_workspace"
+    db["keycloak_db_name"] = db.get("keycloak_db_name") or "keycloak"
+    source = "bundled"
 
     # Bundled installs leave password blank in the wizard; compose defaults POSTGRES_PASSWORD
     # to changeme, so an empty value here would desync DATABASE_URL from the running DB.
@@ -31,30 +39,33 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
     if ws_engine not in {"postgres", "mysql"}:
         raise ValueError("workspace_sql.engine must be 'postgres' or 'mysql'")
 
-    # Monolith: one SQL instance for platform + Studio when Postgres is chosen.
-    # Sync workspace_sql from the platform database block.
-    if ws_engine == "postgres":
-        ws_source = source
-        ws_host = (db.get("host") or "").strip() or ("postgres" if source == "bundled" else "")
-        ws_port = int(db.get("port") or 5432)
+    ws_source = workspace_sql.get("source") or "bundled"
+    ws_password = (workspace_sql.get("password") or "").strip() or db_password
+    if ws_engine == "postgres" and ws_source == "bundled":
+        # Studio schemas share the auto-bundled platform Postgres instance.
+        ws_host = "postgres"
+        ws_port = 5432
         ws_user = db.get("user", "elt")
+        ws_db_name = (
+            workspace_sql.get("database_name")
+            or db.get("workspace_db_name")
+            or "dtorc_workspace"
+        )
         ws_password = db_password
-        ws_db_name = db.get("workspace_db_name") or "dtorc_workspace"
+    elif ws_engine == "mysql" and ws_source == "bundled":
+        ws_host = (workspace_sql.get("host") or "").strip() or "mysql"
+        ws_port = int(workspace_sql.get("port") or 3306)
+        ws_user = workspace_sql.get("user") or "elt"
+        ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
     else:
-        ws_source = workspace_sql.get("source") or "bundled"
-        ws_password = (workspace_sql.get("password") or "").strip() or db_password
-        if ws_source == "bundled":
-            ws_host = (workspace_sql.get("host") or "").strip() or "mysql"
-            ws_port = int(workspace_sql.get("port") or 3306)
-            ws_user = workspace_sql.get("user") or "elt"
-            ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
-        else:
-            ws_host = (workspace_sql.get("host") or "").strip()
-            if not ws_host:
-                raise ValueError("workspace_sql.host is required for external MySQL")
-            ws_port = int(workspace_sql.get("port") or 3306)
-            ws_user = workspace_sql.get("user") or "elt"
-            ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
+        ws_host = (workspace_sql.get("host") or "").strip()
+        if not ws_host:
+            raise ValueError("workspace_sql.host is required for external Studio SQL")
+        ws_port = int(
+            workspace_sql.get("port") or (3306 if ws_engine == "mysql" else 5432)
+        )
+        ws_user = workspace_sql.get("user") or "elt"
+        ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
 
     mongo_source = (mongo_cfg.get("source") or "bundled").strip().lower()
     if mongo_source not in {"bundled", "external", "skip"}:

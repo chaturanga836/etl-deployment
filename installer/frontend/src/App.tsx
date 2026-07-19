@@ -81,19 +81,10 @@ function isAccountStepValid(wizard: WizardState): boolean {
 }
 
 function isDatabaseStepValid(wizard: WizardState, dbValidated: boolean): boolean {
-  const engine = wizard.workspace_sql.engine;
-  if (engine === 'mysql') {
-    const ws = wizard.workspace_sql;
-    if (!ws.host.trim() || !ws.user.trim()) return false;
-    if (ws.source === 'external') {
-      return Boolean(ws.password) && dbValidated;
-    }
-    return true;
-  }
-  const { host, user } = wizard.database;
-  if (!host.trim() || !user.trim()) return false;
-  if (wizard.database.source === 'external') {
-    return Boolean(wizard.database.password) && dbValidated;
+  const ws = wizard.workspace_sql;
+  if (!ws.host.trim() || !ws.user.trim()) return false;
+  if (ws.source === 'external') {
+    return Boolean(ws.password) && dbValidated;
   }
   return true;
 }
@@ -183,7 +174,6 @@ export default function App() {
   const [jobKind, setJobKind] = useState<'deploy' | 'upgrade'>('deploy');
   const [prereqsLoading, setPrereqsLoading] = useState(false);
   const [dbValidated, setDbValidated] = useState(false);
-  const [workspaceSqlValidated, setWorkspaceSqlValidated] = useState(false);
   const [accountTouched, setAccountTouched] = useState(false);
 
   const update = (partial: Partial<WizardState>) => {
@@ -317,10 +307,7 @@ export default function App() {
 
   const next = async () => {
     if (step === 2 && !isDatabaseStepValid(wizard, dbValidated)) {
-      if (
-        (wizard.workspace_sql.engine === 'postgres' && wizard.database.source === 'external')
-        || (wizard.workspace_sql.engine === 'mysql' && wizard.workspace_sql.source === 'external')
-      ) {
+      if (wizard.workspace_sql.source === 'external') {
         message.warning('Fill in database connection details and click Test connection before continuing.');
       } else {
         message.warning('Enter database host, port, and username before continuing.');
@@ -408,7 +395,17 @@ export default function App() {
 
   const testDb = async () => {
     try {
-      await validateDatabase(wizard.database);
+      await validateDatabase({
+        host: wizard.workspace_sql.host,
+        port: wizard.workspace_sql.port,
+        user: wizard.workspace_sql.user,
+        password: wizard.workspace_sql.password,
+        engine: wizard.workspace_sql.engine,
+        database:
+          wizard.workspace_sql.engine === 'mysql'
+            ? wizard.workspace_sql.database_name
+            : 'postgres',
+      });
       setDbValidated(true);
       message.success('Database connection successful');
     } catch (e) {
@@ -551,53 +548,32 @@ export default function App() {
         return (
           <Card title="Database">
             <Paragraph type="secondary">
-              Choose one SQL engine for this server. Platform metadata and Studio project
-              databases (schemas) are created on the same instance.
+              Choose the SQL engine for Studio project databases. Platform metadata Postgres is
+              installed automatically in the background (not shown here).
             </Paragraph>
             <Radio.Group
               value={wizard.workspace_sql.engine}
               onChange={(e) => {
                 const engine = e.target.value as 'postgres' | 'mysql';
                 setDbValidated(false);
-                setWorkspaceSqlValidated(false);
-                if (engine === 'postgres') {
-                  update({
-                    database: {
-                      ...wizard.database,
-                      source: 'bundled',
-                      host: 'postgres',
-                      port: 5432,
-                    },
-                    workspace_sql: {
-                      engine: 'postgres',
-                      source: 'bundled',
-                      host: 'postgres',
-                      port: 5432,
-                      user: wizard.database.user || 'elt',
-                      password: wizard.database.password,
-                      database_name: wizard.database.workspace_db_name || 'dtorc_workspace',
-                    },
-                  });
-                } else {
-                  update({
-                    // Control plane still needs Postgres (Keycloak + app metadata).
-                    database: {
-                      ...wizard.database,
-                      source: 'bundled',
-                      host: 'postgres',
-                      port: 5432,
-                    },
-                    workspace_sql: {
-                      engine: 'mysql',
-                      source: 'bundled',
-                      host: 'mysql',
-                      port: 3306,
-                      user: 'elt',
-                      password: '',
-                      database_name: 'dtorc_workspace',
-                    },
-                  });
-                }
+                update({
+                  // Platform Postgres stays bundled and hidden from the UI.
+                  database: {
+                    ...wizard.database,
+                    source: 'bundled',
+                    host: 'postgres',
+                    port: 5432,
+                  },
+                  workspace_sql: {
+                    engine,
+                    source: 'bundled',
+                    host: engine === 'mysql' ? 'mysql' : 'postgres',
+                    port: engine === 'mysql' ? 3306 : 5432,
+                    user: 'elt',
+                    password: '',
+                    database_name: 'dtorc_workspace',
+                  },
+                });
               }}
               style={{ marginBottom: 16 }}
             >
@@ -606,240 +582,124 @@ export default function App() {
                   <Text strong>PostgreSQL</Text>
                   <br />
                   <Text type="secondary">
-                    One Postgres for platform metadata and Studio project schemas.
+                    Studio schemas on shared Postgres (same server as platform metadata).
                   </Text>
                 </Radio>
                 <Radio value="mysql">
                   <Text strong>MySQL</Text>
                   <br />
-                  <Text type="secondary">
-                    Studio project databases on MySQL (a small Postgres is still started for Keycloak).
-                  </Text>
+                  <Text type="secondary">Studio project databases on shared MySQL.</Text>
                 </Radio>
               </Space>
             </Radio.Group>
 
-            {wizard.workspace_sql.engine === 'postgres' ? (
-              <>
-                <SourceRadios
-                  value={wizard.database.source}
-                  onChange={(source) => {
+            <SourceRadios
+              value={wizard.workspace_sql.source}
+              onChange={(source) => {
+                setDbValidated(false);
+                const engine = wizard.workspace_sql.engine;
+                update({
+                  workspace_sql: {
+                    ...wizard.workspace_sql,
+                    source,
+                    host:
+                      source === 'bundled'
+                        ? (engine === 'mysql' ? 'mysql' : 'postgres')
+                        : wizard.workspace_sql.host,
+                    port:
+                      source === 'bundled'
+                        ? (engine === 'mysql' ? 3306 : 5432)
+                        : wizard.workspace_sql.port,
+                  },
+                });
+              }}
+              bundledLabel={
+                wizard.workspace_sql.engine === 'mysql'
+                  ? 'Install MySQL for me'
+                  : 'Install PostgreSQL for me'
+              }
+              externalLabel={
+                wizard.workspace_sql.engine === 'mysql'
+                  ? 'Use existing MySQL'
+                  : 'Use existing PostgreSQL'
+              }
+            />
+            <Form layout="vertical">
+              <Form.Item label="Host" required>
+                <Input
+                  value={wizard.workspace_sql.host}
+                  onChange={(e) => {
                     setDbValidated(false);
-                    const host = source === 'bundled' ? 'postgres' : wizard.database.host;
-                    update({
-                      database: { ...wizard.database, source, host },
-                      workspace_sql: {
-                        ...wizard.workspace_sql,
-                        engine: 'postgres',
-                        source,
-                        host,
-                        port: wizard.database.port || 5432,
-                        user: wizard.database.user,
-                        password: wizard.database.password,
-                        database_name: wizard.database.workspace_db_name || 'dtorc_workspace',
-                      },
-                    });
+                    update({ workspace_sql: { ...wizard.workspace_sql, host: e.target.value } });
                   }}
-                  bundledLabel="Install PostgreSQL for me"
-                  externalLabel="Use my existing PostgreSQL"
+                  placeholder={
+                    wizard.workspace_sql.source === 'bundled'
+                      ? (wizard.workspace_sql.engine === 'mysql' ? 'mysql' : 'postgres')
+                      : 'db.example.com'
+                  }
                 />
-                <Form layout="vertical">
-                  <Form.Item label="Host" required>
-                    <Input
-                      value={wizard.database.host}
-                      onChange={(e) => {
-                        setDbValidated(false);
-                        const host = e.target.value;
-                        update({
-                          database: { ...wizard.database, host },
-                          workspace_sql: { ...wizard.workspace_sql, host, engine: 'postgres' },
-                        });
-                      }}
-                      placeholder={wizard.database.source === 'bundled' ? 'postgres' : 'db.example.com'}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Port" required>
-                    <InputNumber
-                      value={wizard.database.port}
-                      onChange={(v) => {
-                        setDbValidated(false);
-                        const port = v || 5432;
-                        update({
-                          database: { ...wizard.database, port },
-                          workspace_sql: { ...wizard.workspace_sql, port, engine: 'postgres' },
-                        });
-                      }}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Username" required>
-                    <Input
-                      value={wizard.database.user}
-                      onChange={(e) => {
-                        setDbValidated(false);
-                        const user = e.target.value;
-                        update({
-                          database: { ...wizard.database, user },
-                          workspace_sql: { ...wizard.workspace_sql, user, engine: 'postgres' },
-                        });
-                      }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Password"
-                    required={wizard.database.source === 'external'}
-                    extra={wizard.database.source === 'bundled' ? 'Leave blank to use the default (changeme).' : undefined}
-                  >
-                    <Input.Password
-                      value={wizard.database.password}
-                      onChange={(e) => {
-                        setDbValidated(false);
-                        const password = e.target.value;
-                        update({
-                          database: { ...wizard.database, password },
-                          workspace_sql: { ...wizard.workspace_sql, password, engine: 'postgres' },
-                        });
-                      }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Metadata database"
-                    extra="Platform tables and Keycloak (not shown in Studio)."
-                  >
-                    <Input
-                      value={wizard.database.metadata_db_name}
-                      onChange={(e) => update({ database: { ...wizard.database, metadata_db_name: e.target.value } })}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Studio catalog database"
-                    extra="Studio project schemas are created inside this database."
-                  >
-                    <Input
-                      value={wizard.database.workspace_db_name}
-                      onChange={(e) => {
-                        const workspace_db_name = e.target.value;
-                        update({
-                          database: { ...wizard.database, workspace_db_name },
-                          workspace_sql: {
-                            ...wizard.workspace_sql,
-                            database_name: workspace_db_name,
-                            engine: 'postgres',
-                          },
-                        });
-                      }}
-                    />
-                  </Form.Item>
-                  {wizard.database.source === 'external' && (
-                    <>
-                      <Space>
-                        <Button type="primary" onClick={testDb}>Test connection</Button>
-                        {dbValidated && <Text type="success">Connection verified</Text>}
-                      </Space>
-                      {!dbValidated && (
-                        <Paragraph type="secondary" style={{ marginTop: 12 }}>
-                          Test the connection before continuing.
-                        </Paragraph>
-                      )}
-                    </>
-                  )}
-                </Form>
-              </>
-            ) : (
-              <>
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message="Studio uses MySQL; Keycloak still needs PostgreSQL"
-                  description="A bundled Postgres is started automatically for platform metadata. You only configure MySQL here for project databases."
-                />
-                <SourceRadios
-                  value={wizard.workspace_sql.source}
-                  onChange={(source) => {
+              </Form.Item>
+              <Form.Item label="Port" required>
+                <InputNumber
+                  value={wizard.workspace_sql.port}
+                  onChange={(v) => {
                     setDbValidated(false);
                     update({
                       workspace_sql: {
                         ...wizard.workspace_sql,
-                        source,
-                        host: source === 'bundled' ? 'mysql' : wizard.workspace_sql.host,
-                        port: source === 'bundled' ? 3306 : wizard.workspace_sql.port,
+                        port: v || (wizard.workspace_sql.engine === 'mysql' ? 3306 : 5432),
                       },
                     });
                   }}
-                  bundledLabel="Install MySQL for me"
-                  externalLabel="Use existing MySQL"
+                  style={{ width: '100%' }}
                 />
-                <Form layout="vertical">
-                  <Form.Item label="Host" required>
-                    <Input
-                      value={wizard.workspace_sql.host}
-                      onChange={(e) => {
-                        setDbValidated(false);
-                        update({ workspace_sql: { ...wizard.workspace_sql, host: e.target.value } });
-                      }}
-                      placeholder={wizard.workspace_sql.source === 'bundled' ? 'mysql' : 'mysql.example.com'}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Port" required>
-                    <InputNumber
-                      value={wizard.workspace_sql.port}
-                      onChange={(v) => {
-                        setDbValidated(false);
-                        update({ workspace_sql: { ...wizard.workspace_sql, port: v || 3306 } });
-                      }}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Username" required>
-                    <Input
-                      value={wizard.workspace_sql.user}
-                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, user: e.target.value } })}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Password"
-                    required={wizard.workspace_sql.source === 'external'}
-                    extra={wizard.workspace_sql.source === 'bundled' ? 'Leave blank to use the default (changeme).' : undefined}
-                  >
-                    <Input.Password
-                      value={wizard.workspace_sql.password}
-                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, password: e.target.value } })}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Catalog database">
-                    <Input
-                      value={wizard.workspace_sql.database_name}
-                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, database_name: e.target.value } })}
-                    />
-                  </Form.Item>
-                  {wizard.workspace_sql.source === 'external' && (
-                    <Space>
-                      <Button
-                        type="primary"
-                        onClick={async () => {
-                          try {
-                            await validateDatabase({
-                              ...wizard.workspace_sql,
-                              engine: 'mysql',
-                              database: wizard.workspace_sql.database_name,
-                            });
-                            setDbValidated(true);
-                            message.success('MySQL connection successful');
-                          } catch (err) {
-                            setDbValidated(false);
-                            message.error(err instanceof Error ? err.message : 'Connection failed');
-                          }
-                        }}
-                      >
-                        Test connection
-                      </Button>
-                      {dbValidated && <Text type="success">Verified</Text>}
-                    </Space>
+              </Form.Item>
+              <Form.Item label="Username" required>
+                <Input
+                  value={wizard.workspace_sql.user}
+                  onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, user: e.target.value } })}
+                />
+              </Form.Item>
+              <Form.Item
+                label="Password"
+                required={wizard.workspace_sql.source === 'external'}
+                extra={
+                  wizard.workspace_sql.source === 'bundled'
+                    ? 'Leave blank to use the default (changeme).'
+                    : undefined
+                }
+              >
+                <Input.Password
+                  value={wizard.workspace_sql.password}
+                  onChange={(e) => {
+                    setDbValidated(false);
+                    update({ workspace_sql: { ...wizard.workspace_sql, password: e.target.value } });
+                  }}
+                />
+              </Form.Item>
+              <Form.Item
+                label="Catalog database"
+                extra="Studio project databases (schemas) are created here. Platform system schemas are never shown in Studio."
+              >
+                <Input
+                  value={wizard.workspace_sql.database_name}
+                  onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, database_name: e.target.value } })}
+                />
+              </Form.Item>
+              {wizard.workspace_sql.source === 'external' && (
+                <>
+                  <Space>
+                    <Button type="primary" onClick={testDb}>Test connection</Button>
+                    {dbValidated && <Text type="success">Connection verified</Text>}
+                  </Space>
+                  {!dbValidated && (
+                    <Paragraph type="secondary" style={{ marginTop: 12 }}>
+                      Test the connection before continuing.
+                    </Paragraph>
                   )}
-                </Form>
-              </>
-            )}
+                </>
+              )}
+            </Form>
           </Card>
         );
       case 3:
@@ -1236,18 +1096,15 @@ export default function App() {
               <Descriptions.Item label="Version">{installDefaults?.platform_version ?? wizard.image_tag.replace(/^v/, '')}</Descriptions.Item>
               <Descriptions.Item label="Install type">Single server</Descriptions.Item>
               <Descriptions.Item label="Administrator">{wizard.superadmin_username || '—'}</Descriptions.Item>
-              <Descriptions.Item label="SQL engine">
-                {wizard.workspace_sql.engine === 'mysql' ? 'MySQL (Studio)' : 'PostgreSQL'}
+              <Descriptions.Item label="Studio SQL">
+                {wizard.workspace_sql.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'}
                 {' — '}
-                {wizard.workspace_sql.engine === 'postgres'
-                  ? `${wizard.database.source === 'bundled' ? 'Included' : 'External'} ${wizard.database.host}:${wizard.database.port}`
-                  : `${wizard.workspace_sql.source === 'bundled' ? 'Included' : 'External'} ${wizard.workspace_sql.host}:${wizard.workspace_sql.port}`}
+                {wizard.workspace_sql.source === 'bundled' ? 'Included' : 'External'}
+                {' '}
+                {wizard.workspace_sql.host}:{wizard.workspace_sql.port}
+                {' / '}
+                {wizard.workspace_sql.database_name}
               </Descriptions.Item>
-              {wizard.workspace_sql.engine === 'mysql' && (
-                <Descriptions.Item label="Platform Postgres">
-                  Bundled automatically for Keycloak / metadata
-                </Descriptions.Item>
-              )}
               <Descriptions.Item label="MongoDB">
                 {wizard.mongo.source === 'skip'
                   ? 'Skipped'
