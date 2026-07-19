@@ -60,6 +60,15 @@ env_file="$(cd "$(dirname "$env_file")" && pwd)/$(basename "$env_file")"
 echo "Using env file: $env_file"
 bash "${ROOT_DIR}/scripts/release/sync-env-from-version.sh" "$env_file" "${ROOT_DIR}/VERSION"
 
+# Bind mounts in monolith.yml require this; keep it in the env file so
+# `docker compose --env-file` works without a separate export.
+if grep -q '^ETL_DEPLOYMENT_HOST_ROOT=' "$env_file"; then
+  sed -i.bak "s|^ETL_DEPLOYMENT_HOST_ROOT=.*|ETL_DEPLOYMENT_HOST_ROOT=${ETL_DEPLOYMENT_HOST_ROOT}|" "$env_file"
+else
+  echo "ETL_DEPLOYMENT_HOST_ROOT=${ETL_DEPLOYMENT_HOST_ROOT}" >> "$env_file"
+fi
+rm -f "${env_file}.bak"
+
 export ENV_FILE="$env_file"
 
 # shellcheck disable=SC1091
