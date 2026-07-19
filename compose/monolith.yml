@@ -341,9 +341,12 @@ services:
       - elt-net
 
 networks:
+  # Explicit names so they match DATA_PLANE_NETWORK / role compose (not dt-orch_*).
   elt-net:
+    name: elt-net
     driver: bridge
   data-plane-net:
+    name: data-plane-net
     driver: bridge
 
 volumes:
