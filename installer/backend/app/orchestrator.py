@@ -54,6 +54,45 @@ def _login_url_from_k8s(ingress_host: str) -> str:
     return f"https://{ingress_host}/login"
 
 
+def _api_base_candidates(env: dict[str, str]) -> list[str]:
+    """URLs the installer can use to reach the API (prefer host loopback over APP_URL)."""
+    http_port = env.get("HTTP_PORT", "80")
+    api_port = env.get("API_PORT", "8000")
+    app_url = (env.get("APP_URL") or "http://localhost").rstrip("/")
+    candidates = [
+        f"http://host.docker.internal:{http_port}",
+        f"http://host.docker.internal:{api_port}",
+        f"http://127.0.0.1:{http_port}",
+        f"http://127.0.0.1:{api_port}",
+        app_url,
+    ]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for base in candidates:
+        if base and base not in seen:
+            seen.add(base)
+            ordered.append(base)
+    return ordered
+
+
+async def _wait_for_api_base(env: dict[str, str], *, attempts: int = 30) -> str:
+    """Return a base URL that responds 200 on /health (no redirect following)."""
+    last_detail = "no candidates probed"
+    for _ in range(attempts):
+        for base in _api_base_candidates(env):
+            health_url = urljoin(base.rstrip("/") + "/", "health")
+            try:
+                async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+                    hr = await client.get(health_url)
+                    if hr.status_code == 200:
+                        return base
+                    last_detail = f"{health_url} -> HTTP {hr.status_code}"
+            except httpx.HTTPError as exc:
+                last_detail = f"{health_url}: {exc}"
+        await asyncio.sleep(2)
+    raise RuntimeError(f"API health check failed before setup complete ({last_detail})")
+
+
 async def _stream_process(job: DeployJob, cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None, prefix: str = "") -> int:
     job.push_log(f"$ {' '.join(cmd)}", prefix=prefix)
     proc = await asyncio.create_subprocess_exec(
@@ -175,9 +214,6 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
         raise RuntimeError("Superadmin bootstrap failed")
 
     bootstrap_token = env.get("INSTALL_BOOTSTRAP_TOKEN", "")
-    api_url = env.get("APP_URL", "http://localhost")
-    health_url = urljoin(api_url.rstrip("/") + "/", "health")
-    setup_url = urljoin(api_url.rstrip("/") + "/", "api/v1/setup/complete")
 
     superadmin_meta_path = STATE_DIR / "superadmin.json"
     keycloak_user_id = superadmin["username"]
@@ -185,17 +221,10 @@ async def _run_bootstrap(job: DeployJob, config: dict[str, Any], env_path: Path)
         meta = json.loads(superadmin_meta_path.read_text(encoding="utf-8"))
         keycloak_user_id = meta.get("user_id", keycloak_user_id)
 
-    for _ in range(30):
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                hr = await client.get(health_url)
-                if hr.status_code == 200:
-                    break
-        except httpx.HTTPError:
-            pass
-        await asyncio.sleep(2)
-    else:
-        raise RuntimeError("API health check failed before setup complete")
+    # Prefer host loopback over APP_URL — public host may be wrong or unreachable
+    # from the installer container (e.g. email entered as website address).
+    api_base = await _wait_for_api_base(env)
+    setup_url = urljoin(api_base.rstrip("/") + "/", "api/v1/setup/complete")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(

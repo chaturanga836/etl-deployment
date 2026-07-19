@@ -97,9 +97,15 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
 
     if mode == "monolith":
         mono = wizard.get("monolith", {})
+        public_host = (mono.get("public_host") or "localhost").strip()
+        if "@" in public_host:
+            raise ValueError(
+                "Website address looks like an email. Enter this server's public IP "
+                "or domain name (e.g. 13.200.160.10 or studio.example.com)."
+            )
         kc_port = int(kc.get("port") or mono.get("keycloak_port") or 8081)
         config["monolith"] = {
-            "public_host": mono.get("public_host", "localhost"),
+            "public_host": public_host,
             "use_proxy": mono.get("use_proxy", True),
             "ports": {
                 "http": int(mono.get("http_port", 80)),

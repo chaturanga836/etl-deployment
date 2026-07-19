@@ -711,10 +711,12 @@ PROFILE="${PROFILE:-full}"
 HEALTH_URL="${HEALTH_URL:-}"
 
 if [[ -z "$HEALTH_URL" ]]; then
+  # Always probe via host loopback — never APP_URL (public host may be wrong,
+  # unreachable from this host, or an email mistaken for a hostname).
   if [[ "$PROFILE" == "full" ]]; then
-    HEALTH_URL="${APP_URL:-http://localhost}/health"
+    HEALTH_URL="$(host_loopback_base "${HTTP_PORT:-80}")/health"
   else
-    HEALTH_URL="http://localhost:${API_PORT:-8000}/health"
+    HEALTH_URL="$(host_loopback_base "${API_PORT:-8000}")/health"
   fi
 fi
 

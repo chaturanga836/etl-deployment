@@ -116,7 +116,9 @@ function isCentrifugoStepValid(wizard: WizardState): boolean {
 }
 
 function isWebsiteStepValid(wizard: WizardState): boolean {
-  return wizard.monolith.public_host.trim().length > 0;
+  const host = wizard.monolith.public_host.trim();
+  // Reject emails mistaken for a hostname (e.g. user@gmail.com).
+  return host.length > 0 && !host.includes('@');
 }
 
 function SourceRadios({
@@ -889,7 +891,18 @@ export default function App() {
                 Enter the address people will use to open DT Orch in a browser (usually this server&apos;s public IP or domain name).
               </Paragraph>
               <Form layout="vertical">
-                <Form.Item label="Address" extra="Example: 13.200.160.10 or studio.mycompany.com">
+                <Form.Item
+                  label="Address"
+                  extra="Example: 13.200.160.10 or studio.mycompany.com — not an email address"
+                  validateStatus={
+                    wizard.monolith.public_host.includes('@') ? 'error' : undefined
+                  }
+                  help={
+                    wizard.monolith.public_host.includes('@')
+                      ? 'Enter this server’s public IP or domain, not an email'
+                      : undefined
+                  }
+                >
                   <Input
                     value={wizard.monolith.public_host}
                     onChange={(e) => update({ monolith: { ...wizard.monolith, public_host: e.target.value } })}
