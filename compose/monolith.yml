@@ -217,9 +217,11 @@ services:
     profiles: [full, backend]
     environment:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-changeme-internal-token}
-      PROVISION_MODE: ${PROVISION_MODE:-docker}
+      # local = shared SQL for Studio DBs (schemas). Do not default to docker
+      # (that spawned ws-*-postgres-db containers per project).
+      PROVISION_MODE: ${PROVISION_MODE:-local}
       DATA_PLANE_NETWORK: ${DATA_PLANE_NETWORK:-data-plane-net}
-      LOCAL_POSTGRES_URL: postgresql://${POSTGRES_USER:-elt}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/postgres
+      LOCAL_POSTGRES_URL: postgresql://${POSTGRES_USER:-elt}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${DTORC_WORKSPACE_DB_NAME:-dtorc_workspace}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - infra_instances:/app/data/instances

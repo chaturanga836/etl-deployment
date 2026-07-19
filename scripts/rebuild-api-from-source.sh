@@ -50,8 +50,18 @@ fi
 export ETL_DEPLOYMENT_HOST_ROOT="${ETL_DEPLOYMENT_HOST_ROOT:-$ROOT_DIR}"
 export ENV_FILE="$env_file"
 
-echo "Recreating api and worker..."
-docker compose -f "$ROOT_DIR/compose/monolith.yml" --env-file "$env_file" --profile full up -d --force-recreate api worker
+# Prefer shared SQL for any leftover infra create_database calls.
+if [[ -f "$env_file" ]]; then
+  if grep -q '^PROVISION_MODE=' "$env_file"; then
+    sed -i.bak "s|^PROVISION_MODE=.*|PROVISION_MODE=local|" "$env_file"
+  else
+    echo "PROVISION_MODE=local" >> "$env_file"
+  fi
+  rm -f "${env_file}.bak"
+fi
+
+echo "Recreating api, worker, and infra-service..."
+docker compose -f "$ROOT_DIR/compose/monolith.yml" --env-file "$env_file" --profile full up -d --force-recreate api worker infra-service
 
 # Studio project DBs are schemas on shared SQL — remove leftover per-workspace containers.
 echo "Removing leftover per-workspace Postgres containers (ws-*-postgres-db)..."
@@ -65,5 +75,7 @@ done
 
 echo ""
 echo "API rebuilt with shared-schema Studio databases (no ws-*-postgres-db)."
+echo "Also rebuild frontend so Studio copy matches:"
+echo "  bash $ROOT_DIR/scripts/rebuild-frontend-from-source.sh --public-host YOUR_IP"
 echo "Watch: docker logs -f dt-orch-api"
 echo "Health: curl -sf http://localhost/health && echo PASS"
