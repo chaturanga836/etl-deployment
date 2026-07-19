@@ -53,6 +53,17 @@ export ENV_FILE="$env_file"
 echo "Recreating api and worker..."
 docker compose -f "$ROOT_DIR/compose/monolith.yml" --env-file "$env_file" --profile full up -d --force-recreate api worker
 
+# Studio project DBs are schemas on shared SQL — remove leftover per-workspace containers.
+echo "Removing leftover per-workspace Postgres containers (ws-*-postgres-db)..."
+for c in $(docker ps -aq 2>/dev/null); do
+  name="$(docker inspect -f '{{.Name}}' "$c" 2>/dev/null | sed 's#^/##')"
+  if [[ "$name" =~ ^ws-[0-9]+-postgres-db$ ]]; then
+    echo "Removing $name"
+    docker rm -f "$c" || true
+  fi
+done
+
 echo ""
+echo "API rebuilt with shared-schema Studio databases (no ws-*-postgres-db)."
 echo "Watch: docker logs -f dt-orch-api"
 echo "Health: curl -sf http://localhost/health && echo PASS"
