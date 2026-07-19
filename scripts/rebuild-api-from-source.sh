@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Build a fixed API image from sibling etl-back (avoids broken v1.0.1 GHCR Cython build).
+# DEVELOPER ONLY — build API from a local etl-back checkout.
+# Production / customer hosts must NOT clone app repos. Use:
+#   bash scripts/upgrade.sh full
+# after a platform release publishes new GHCR images.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,18 +14,34 @@ usage() {
   cat <<'EOF'
 Usage: rebuild-api-from-source.sh
 
-Builds etl-back with SOURCE_PROTECTION=1 using current release_keep_py rules
-(keycloak_auth and FastAPI Depends modules stay as pure Python).
+DEVELOPER ONLY. Builds etl-back from a sibling checkout and retags the
+local API image. Not for production install hosts.
 
-Requires etl-back checkout at ../etl-back (or set ETL_BACK).
+On a customer / EC2 host (etl-deployment only), upgrade from GHCR instead:
 
-After build, updates STATE_DIR/.env API_IMAGE and recreates api + worker.
+  cd ~/etl-deployment
+  git pull
+  bash scripts/upgrade.sh full
+
+Requires etl-back at ../etl-back (or set ETL_BACK) on a build machine.
 EOF
 }
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 if [[ ! -f "$ETL_BACK/Dockerfile" ]]; then
-  echo "ERROR: etl-back not found at $ETL_BACK"
-  echo "Clone it: git clone <etl-back-url> $ETL_BACK"
+  echo "ERROR: This script builds from local source and needs etl-back at:"
+  echo "  $ETL_BACK"
+  echo ""
+  echo "On a production host you should not clone etl-back."
+  echo "Pull published images instead:"
+  echo "  bash $ROOT_DIR/scripts/upgrade.sh full"
+  echo ""
+  echo "To publish a new API image, run a platform release from CI / a"
+  echo "dev machine that already has the app repos, then upgrade on this host."
   exit 1
 fi
 
@@ -74,8 +93,6 @@ for c in $(docker ps -aq 2>/dev/null); do
 done
 
 echo ""
-echo "API rebuilt with shared-schema Studio databases (no ws-*-postgres-db)."
-echo "Also rebuild frontend so Studio copy matches:"
-echo "  bash $ROOT_DIR/scripts/rebuild-frontend-from-source.sh --public-host YOUR_IP"
+echo "Local API image applied. For production, prefer: bash scripts/upgrade.sh full"
 echo "Watch: docker logs -f dt-orch-api"
 echo "Health: curl -sf http://localhost/health && echo PASS"
