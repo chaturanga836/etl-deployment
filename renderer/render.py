@@ -59,6 +59,68 @@ def _database_url(config: dict[str, Any]) -> tuple[str, str, str, str, str]:
     )
 
 
+def _workspace_sql_url(config: dict[str, Any], fallback_pg_workspace_url: str) -> tuple[str, str]:
+    """Return (WORKSPACE_SQL_ENGINE, WORKSPACE_DATABASE_URL)."""
+    ws = config.get("workspace_sql") or {}
+    engine = (ws.get("engine") or "postgres").strip().lower()
+    if engine not in {"postgres", "mysql"}:
+        engine = "postgres"
+    if engine == "postgres":
+        # Prefer explicit workspace_sql host when external; else platform workspace URL.
+        if (ws.get("source") or "bundled") == "external" and (ws.get("host") or "").strip():
+            user = ws.get("user") or "elt"
+            raw_password = (ws.get("password") or "").strip() or "changeme"
+            host = ws["host"].strip()
+            port = int(ws.get("port") or 5432)
+            db_name = ws.get("database_name") or "dtorc_workspace"
+            url = (
+                f"postgresql://{quote_plus(user)}:{quote_plus(raw_password)}"
+                f"@{host}:{port}/{db_name}"
+            )
+            return engine, url
+        return engine, fallback_pg_workspace_url
+
+    user = ws.get("user") or "elt"
+    raw_password = (ws.get("password") or "").strip() or "changeme"
+    host = (ws.get("host") or "").strip() or "mysql"
+    port = int(ws.get("port") or 3306)
+    db_name = ws.get("database_name") or "dtorc_workspace"
+    url = (
+        f"mysql+pymysql://{quote_plus(user)}:{quote_plus(raw_password)}"
+        f"@{host}:{port}/{db_name}"
+    )
+    return engine, url
+
+
+def _mongo_url(config: dict[str, Any]) -> str:
+    mongo = config.get("mongo") or {}
+    source = (mongo.get("source") or "skip").strip().lower()
+    if source == "skip":
+        return ""
+    user = mongo.get("user") or "elt"
+    raw_password = (mongo.get("password") or "").strip() or "changeme"
+    host = (mongo.get("host") or "").strip() or "mongo"
+    port = int(mongo.get("port") or 27017)
+    db_name = mongo.get("database_name") or "dtorc_mongo"
+    return (
+        f"mongodb://{quote_plus(user)}:{quote_plus(raw_password)}"
+        f"@{host}:{port}/{db_name}?authSource=admin"
+    )
+
+
+def _extra_compose_profiles(config: dict[str, Any]) -> str:
+    profiles: list[str] = []
+    ws = config.get("workspace_sql") or {}
+    if (ws.get("engine") or "postgres").strip().lower() == "mysql" and (
+        ws.get("source") or "bundled"
+    ) == "bundled":
+        profiles.append("workspace-mysql")
+    mongo = config.get("mongo") or {}
+    if (mongo.get("source") or "skip").strip().lower() == "bundled":
+        profiles.append("workspace-mongo")
+    return ",".join(profiles)
+
+
 def _registry_lines(config: dict[str, Any]) -> list[str]:
     reg = config.get("registry", {})
     app = config.get("app", {})
@@ -156,6 +218,9 @@ def render_env(config: dict[str, Any]) -> str:
     kc = config["keycloak"]
     app = config.get("app", {})
     database_url, workspace_database_url, pg_user, pg_password, metadata_db = _database_url(config)
+    ws_engine, workspace_database_url = _workspace_sql_url(config, workspace_database_url)
+    mongo_url = _mongo_url(config)
+    extra_profiles = _extra_compose_profiles(config)
     realm = kc["realm"]
 
     lines: list[str] = [
@@ -250,7 +315,10 @@ def render_env(config: dict[str, Any]) -> str:
         f"KEYCLOAK_DB_NAME={db.get('keycloak_db_name', 'keycloak')}",
         "",
         f"DATABASE_URL={database_url}",
+        f"WORKSPACE_SQL_ENGINE={ws_engine}",
         f"WORKSPACE_DATABASE_URL={workspace_database_url}",
+        _env_line("WORKSPACE_MONGO_URL", mongo_url),
+        f"EXTRA_COMPOSE_PROFILES={extra_profiles}",
         f"REDIS_URL={_redis_url(config)}",
         f"SANDBOX_ENABLED={'true' if app.get('sandbox_enabled', True) else 'false'}",
         "",
@@ -258,6 +326,24 @@ def render_env(config: dict[str, Any]) -> str:
         "DEBUG=false",
         "",
     ])
+
+    ws = config.get("workspace_sql") or {}
+    if ws_engine == "mysql":
+        lines.extend([
+            f"MYSQL_USER={ws.get('user') or pg_user}",
+            _env_line("MYSQL_PASSWORD", ws.get("password") or pg_password),
+            f"MYSQL_DATABASE={ws.get('database_name') or 'dtorc_workspace'}",
+            _env_line("MYSQL_ROOT_PASSWORD", ws.get("password") or pg_password),
+            "",
+        ])
+    mongo = config.get("mongo") or {}
+    if (mongo.get("source") or "skip") != "skip":
+        lines.extend([
+            f"MONGO_USER={mongo.get('user') or 'elt'}",
+            _env_line("MONGO_PASSWORD", mongo.get("password") or pg_password),
+            f"MONGO_DATABASE={mongo.get('database_name') or 'dtorc_mongo'}",
+            "",
+        ])
 
     if mode == "monolith":
         keycloak_port = int(

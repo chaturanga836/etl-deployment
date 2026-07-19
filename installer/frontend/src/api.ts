@@ -43,6 +43,8 @@ export type HostInfo = {
 };
 
 export type ServiceSource = 'bundled' | 'external';
+export type MongoSource = 'bundled' | 'external' | 'skip';
+export type WorkspaceSqlEngine = 'postgres' | 'mysql';
 
 export type WizardState = {
   deployment_mode: 'monolith' | 'distributed' | 'kubernetes';
@@ -53,6 +55,7 @@ export type WizardState = {
   superadmin_password: string;
   superadmin_email: string;
   license_key: string;
+  /** Platform metadata Postgres (Keycloak + dtorc_metadata + ws_* schemas). */
   database: {
     source: ServiceSource;
     host: string;
@@ -62,6 +65,24 @@ export type WizardState = {
     metadata_db_name: string;
     workspace_db_name: string;
     keycloak_db_name: string;
+  };
+  /** Studio project SQL data plane (schemas / MySQL databases). */
+  workspace_sql: {
+    engine: WorkspaceSqlEngine;
+    source: ServiceSource;
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database_name: string;
+  };
+  mongo: {
+    source: MongoSource;
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database_name: string;
   };
   keycloak: {
     source: ServiceSource;
@@ -143,6 +164,23 @@ export const defaultWizard: WizardState = {
     workspace_db_name: 'dtorc_workspace',
     keycloak_db_name: 'keycloak',
   },
+  workspace_sql: {
+    engine: 'postgres',
+    source: 'bundled',
+    host: 'postgres',
+    port: 5432,
+    user: 'elt',
+    password: '',
+    database_name: 'dtorc_workspace',
+  },
+  mongo: {
+    source: 'bundled',
+    host: 'mongo',
+    port: 27017,
+    user: 'elt',
+    password: '',
+    database_name: 'dtorc_mongo',
+  },
   keycloak: {
     source: 'bundled',
     host: 'localhost',
@@ -216,7 +254,14 @@ export async function fetchPrerequisites(): Promise<Prerequisites> {
   return r.json();
 }
 
-export async function validateDatabase(body: WizardState['database']) {
+export async function validateDatabase(body: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database?: string;
+  engine?: WorkspaceSqlEngine | 'postgres';
+}) {
   const r = await fetch(`${API}/validate/database`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -225,7 +270,8 @@ export async function validateDatabase(body: WizardState['database']) {
       port: body.port,
       user: body.user,
       password: body.password,
-      database: 'postgres',
+      database: body.database || (body.engine === 'mysql' ? 'mysql' : 'postgres'),
+      engine: body.engine || 'postgres',
     }),
   });
   if (!r.ok) {
@@ -248,6 +294,8 @@ export async function startDeploy(wizard: WizardState): Promise<string> {
       superadmin_email: wizard.superadmin_email || undefined,
       license_key: '',
       database: wizard.database,
+      workspace_sql: wizard.workspace_sql,
+      mongo: wizard.mongo,
       keycloak: wizard.keycloak,
       redis: wizard.redis,
       minio: wizard.minio,

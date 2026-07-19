@@ -728,7 +728,16 @@ fi
 
 echo "Starting DT Orch (profile: ${PROFILE})..."
 # shellcheck disable=SC2086
-if ! docker_compose "${COMPOSE_ARGS[@]}" --profile "$PROFILE" --env-file "$EF" up -d "${BUILD_ARGS[@]}"; then
+PROFILE_ARGS=(--profile "$PROFILE")
+# Enable optional workspace MySQL / Mongo services when rendered into .env.
+if [[ -n "${EXTRA_COMPOSE_PROFILES:-}" ]]; then
+  IFS=',' read -r -a _extra_profiles <<< "${EXTRA_COMPOSE_PROFILES}"
+  for _p in "${_extra_profiles[@]}"; do
+    _p="$(echo "$_p" | xargs)"
+    [[ -n "$_p" ]] && PROFILE_ARGS+=(--profile "$_p")
+  done
+fi
+if ! docker_compose "${COMPOSE_ARGS[@]}" "${PROFILE_ARGS[@]}" --env-file "$EF" up -d "${BUILD_ARGS[@]}"; then
   show_api_failure_logs
   exit 1
 fi

@@ -52,11 +52,12 @@ const { Paragraph, Text, Link } = Typography;
 const MIN_USERNAME_LENGTH = 3;
 const MIN_PASSWORD_LENGTH = 8;
 
-/** User-visible step labels (matches internal step indices 0–11). */
+/** User-visible step labels (matches internal step indices 0–12). */
 const STEP_LABELS = [
   'Welcome',
   'Type',
   'Database',
+  'MongoDB',
   'Keycloak',
   'Redis',
   'MinIO',
@@ -68,9 +69,9 @@ const STEP_LABELS = [
   'Done',
 ];
 
-const LAST_FORM_STEP = 9;
-const INSTALLING_STEP = 10;
-const DONE_STEP = 11;
+const LAST_FORM_STEP = 10;
+const INSTALLING_STEP = 11;
+const DONE_STEP = 12;
 
 function isAccountStepValid(wizard: WizardState): boolean {
   return (
@@ -83,9 +84,18 @@ function isDatabaseStepValid(wizard: WizardState, dbValidated: boolean): boolean
   const { host, user } = wizard.database;
   if (!host.trim() || !user.trim()) return false;
   if (wizard.database.source === 'external') {
-    return Boolean(wizard.database.password) && dbValidated;
+    if (!(wizard.database.password && dbValidated)) return false;
+  }
+  const ws = wizard.workspace_sql;
+  if (ws.engine === 'mysql' && ws.source === 'external') {
+    return Boolean(ws.host.trim() && ws.user.trim() && ws.password);
   }
   return true;
+}
+
+function isMongoStepValid(wizard: WizardState): boolean {
+  if (wizard.mongo.source === 'skip' || wizard.mongo.source === 'bundled') return true;
+  return Boolean(wizard.mongo.host.trim() && wizard.mongo.port && wizard.mongo.user.trim());
 }
 
 function isKeycloakStepValid(wizard: WizardState): boolean {
@@ -168,6 +178,7 @@ export default function App() {
   const [jobKind, setJobKind] = useState<'deploy' | 'upgrade'>('deploy');
   const [prereqsLoading, setPrereqsLoading] = useState(false);
   const [dbValidated, setDbValidated] = useState(false);
+  const [workspaceSqlValidated, setWorkspaceSqlValidated] = useState(false);
   const [accountTouched, setAccountTouched] = useState(false);
 
   const update = (partial: Partial<WizardState>) => {
@@ -308,29 +319,33 @@ export default function App() {
       }
       return;
     }
-    if (step === 3 && !isKeycloakStepValid(wizard)) {
+    if (step === 3 && !isMongoStepValid(wizard)) {
+      message.warning('Fill in MongoDB connection details or choose Skip / Install for me.');
+      return;
+    }
+    if (step === 4 && !isKeycloakStepValid(wizard)) {
       message.warning('Fill in all Keycloak fields before continuing.');
       return;
     }
-    if (step === 4 && !isRedisStepValid(wizard)) {
+    if (step === 5 && !isRedisStepValid(wizard)) {
       message.warning('Enter Redis host and port before continuing.');
       return;
     }
-    if (step === 5 && !isMinioStepValid(wizard)) {
+    if (step === 6 && !isMinioStepValid(wizard)) {
       message.warning('Fill in all MinIO fields before continuing.');
       return;
     }
-    if (step === 6 && !isCentrifugoStepValid(wizard)) {
+    if (step === 7 && !isCentrifugoStepValid(wizard)) {
       message.warning('Fill in all Centrifugo fields before continuing.');
       return;
     }
-    if (step === 7 && !isAccountStepValid(wizard)) {
+    if (step === 8 && !isAccountStepValid(wizard)) {
       message.warning(
         `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
       );
       return;
     }
-    if (step === 8 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
+    if (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
       message.warning('Enter the website address people will use to open DT Orch.');
       return;
     }
@@ -340,12 +355,13 @@ export default function App() {
 
   const nextDisabled = (
     (step === 2 && !isDatabaseStepValid(wizard, dbValidated))
-    || (step === 3 && !isKeycloakStepValid(wizard))
-    || (step === 4 && !isRedisStepValid(wizard))
-    || (step === 5 && !isMinioStepValid(wizard))
-    || (step === 6 && !isCentrifugoStepValid(wizard))
-    || (step === 7 && !isAccountStepValid(wizard))
-    || (step === 8 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
+    || (step === 3 && !isMongoStepValid(wizard))
+    || (step === 4 && !isKeycloakStepValid(wizard))
+    || (step === 5 && !isRedisStepValid(wizard))
+    || (step === 6 && !isMinioStepValid(wizard))
+    || (step === 7 && !isCentrifugoStepValid(wizard))
+    || (step === 8 && !isAccountStepValid(wizard))
+    || (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
   );
 
   const back = () => setStep((s) => Math.max(0, s - 1));
@@ -526,6 +542,11 @@ export default function App() {
       case 2:
         return (
           <Card title="Database">
+            <Paragraph type="secondary">
+              Platform metadata always uses PostgreSQL (Keycloak and internal project schemas).
+              Choose a separate SQL engine for Studio project databases (user-created schemas only).
+            </Paragraph>
+            <Text strong>Platform PostgreSQL</Text>
             <SourceRadios
               value={wizard.database.source}
               onChange={(source) => {
@@ -538,8 +559,8 @@ export default function App() {
                   },
                 });
               }}
-              bundledLabel="Install database for me"
-              externalLabel="Use my existing database"
+              bundledLabel="Install PostgreSQL for me"
+              externalLabel="Use my existing PostgreSQL"
             />
             <Form layout="vertical">
               <Form.Item label="Host" required>
@@ -590,12 +611,6 @@ export default function App() {
                   onChange={(e) => update({ database: { ...wizard.database, metadata_db_name: e.target.value } })}
                 />
               </Form.Item>
-              <Form.Item label="Workspace database">
-                <Input
-                  value={wizard.database.workspace_db_name}
-                  onChange={(e) => update({ database: { ...wizard.database, workspace_db_name: e.target.value } })}
-                />
-              </Form.Item>
               {wizard.database.source === 'external' && (
                 <>
                   <Space>
@@ -610,9 +625,201 @@ export default function App() {
                 </>
               )}
             </Form>
+
+            <Text strong style={{ display: 'block', marginTop: 24 }}>Studio project SQL</Text>
+            <Paragraph type="secondary">
+              Users create project databases (schemas) here. Platform system schemas are never shown in Studio.
+            </Paragraph>
+            <Radio.Group
+              value={wizard.workspace_sql.engine}
+              onChange={(e) => {
+                const engine = e.target.value as 'postgres' | 'mysql';
+                setWorkspaceSqlValidated(false);
+                update({
+                  workspace_sql: {
+                    ...wizard.workspace_sql,
+                    engine,
+                    source: 'bundled',
+                    host: engine === 'mysql' ? 'mysql' : 'postgres',
+                    port: engine === 'mysql' ? 3306 : 5432,
+                    database_name: 'dtorc_workspace',
+                  },
+                });
+              }}
+              style={{ marginBottom: 16 }}
+            >
+              <Space direction="vertical">
+                <Radio value="postgres">
+                  <Text strong>PostgreSQL</Text>
+                  <br />
+                  <Text type="secondary">Reuse platform Postgres (schemas in dtorc_workspace).</Text>
+                </Radio>
+                <Radio value="mysql">
+                  <Text strong>MySQL</Text>
+                  <br />
+                  <Text type="secondary">Shared MySQL for Studio project databases.</Text>
+                </Radio>
+              </Space>
+            </Radio.Group>
+            {wizard.workspace_sql.engine === 'mysql' && (
+              <>
+                <SourceRadios
+                  value={wizard.workspace_sql.source}
+                  onChange={(source) => {
+                    setWorkspaceSqlValidated(false);
+                    update({
+                      workspace_sql: {
+                        ...wizard.workspace_sql,
+                        source,
+                        host: source === 'bundled' ? 'mysql' : wizard.workspace_sql.host,
+                        port: source === 'bundled' ? 3306 : wizard.workspace_sql.port,
+                      },
+                    });
+                  }}
+                  bundledLabel="Install MySQL for me"
+                  externalLabel="Use existing MySQL"
+                />
+                <Form layout="vertical">
+                  <Form.Item label="Host" required>
+                    <Input
+                      value={wizard.workspace_sql.host}
+                      onChange={(e) => {
+                        setWorkspaceSqlValidated(false);
+                        update({ workspace_sql: { ...wizard.workspace_sql, host: e.target.value } });
+                      }}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Port" required>
+                    <InputNumber
+                      value={wizard.workspace_sql.port}
+                      onChange={(v) => {
+                        setWorkspaceSqlValidated(false);
+                        update({ workspace_sql: { ...wizard.workspace_sql, port: v || 3306 } });
+                      }}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Username" required>
+                    <Input
+                      value={wizard.workspace_sql.user}
+                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, user: e.target.value } })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Password" required={wizard.workspace_sql.source === 'external'}>
+                    <Input.Password
+                      value={wizard.workspace_sql.password}
+                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, password: e.target.value } })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Catalog database">
+                    <Input
+                      value={wizard.workspace_sql.database_name}
+                      onChange={(e) => update({ workspace_sql: { ...wizard.workspace_sql, database_name: e.target.value } })}
+                    />
+                  </Form.Item>
+                  {wizard.workspace_sql.source === 'external' && (
+                    <Space>
+                      <Button
+                        type="primary"
+                        onClick={async () => {
+                          try {
+                            await validateDatabase({
+                              ...wizard.workspace_sql,
+                              engine: 'mysql',
+                              database: wizard.workspace_sql.database_name,
+                            });
+                            setWorkspaceSqlValidated(true);
+                            message.success('MySQL connection successful');
+                          } catch (err) {
+                            setWorkspaceSqlValidated(false);
+                            message.error(err instanceof Error ? err.message : 'Connection failed');
+                          }
+                        }}
+                      >
+                        Test MySQL
+                      </Button>
+                      {workspaceSqlValidated && <Text type="success">Verified</Text>}
+                    </Space>
+                  )}
+                </Form>
+              </>
+            )}
           </Card>
         );
       case 3:
+        return (
+          <Card title="MongoDB">
+            <Paragraph type="secondary">
+              Shared MongoDB for the platform (agents and future Studio features). Not used for SQL project schemas.
+            </Paragraph>
+            <Radio.Group
+              value={wizard.mongo.source}
+              onChange={(e) => {
+                const source = e.target.value as 'bundled' | 'external' | 'skip';
+                update({
+                  mongo: {
+                    ...wizard.mongo,
+                    source,
+                    host: source === 'bundled' ? 'mongo' : wizard.mongo.host,
+                  },
+                });
+              }}
+              style={{ marginBottom: 16 }}
+            >
+              <Space direction="vertical">
+                <Radio value="bundled">
+                  <Text strong>Install MongoDB for me</Text>
+                </Radio>
+                <Radio value="external">
+                  <Text strong>Use existing MongoDB</Text>
+                </Radio>
+                <Radio value="skip">
+                  <Text strong>Skip for now</Text>
+                </Radio>
+              </Space>
+            </Radio.Group>
+            {wizard.mongo.source !== 'skip' && (
+              <Form layout="vertical">
+                <Form.Item label="Host" required={wizard.mongo.source === 'external'}>
+                  <Input
+                    value={wizard.mongo.host}
+                    onChange={(e) => update({ mongo: { ...wizard.mongo, host: e.target.value } })}
+                    placeholder={wizard.mongo.source === 'bundled' ? 'mongo' : 'mongo.example.com'}
+                  />
+                </Form.Item>
+                <Form.Item label="Port" required>
+                  <InputNumber
+                    value={wizard.mongo.port}
+                    onChange={(v) => update({ mongo: { ...wizard.mongo, port: v || 27017 } })}
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
+                <Form.Item label="Username">
+                  <Input
+                    value={wizard.mongo.user}
+                    onChange={(e) => update({ mongo: { ...wizard.mongo, user: e.target.value } })}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Password"
+                  extra={wizard.mongo.source === 'bundled' ? 'Leave blank to use the platform DB password default.' : undefined}
+                >
+                  <Input.Password
+                    value={wizard.mongo.password}
+                    onChange={(e) => update({ mongo: { ...wizard.mongo, password: e.target.value } })}
+                  />
+                </Form.Item>
+                <Form.Item label="Database name">
+                  <Input
+                    value={wizard.mongo.database_name}
+                    onChange={(e) => update({ mongo: { ...wizard.mongo, database_name: e.target.value } })}
+                  />
+                </Form.Item>
+              </Form>
+            )}
+          </Card>
+        );
+      case 4:
         return (
           <Card title="Keycloak">
             <Paragraph type="secondary">
@@ -671,7 +878,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 4:
+      case 5:
         return (
           <Card title="Redis">
             <Paragraph type="secondary">
@@ -712,7 +919,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 5:
+      case 6:
         return (
           <Card title="MinIO (object storage)">
             <Paragraph type="secondary">
@@ -771,7 +978,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 6:
+      case 7:
         return (
           <Card title="Centrifugo (realtime notifications)">
             <Paragraph type="secondary">
@@ -824,7 +1031,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 7:
+      case 8:
         return (
           <Card title="Your administrator account">
             <Paragraph type="secondary">
@@ -883,7 +1090,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 8:
+      case 9:
         if (wizard.deployment_mode === 'monolith') {
           return (
             <Card title="Your website address">
@@ -925,7 +1132,7 @@ export default function App() {
             <Paragraph type="secondary">Complete website settings for this install mode.</Paragraph>
           </Card>
         );
-      case 9:
+      case 10:
         return (
           <Card title="Ready to install">
             <Descriptions bordered column={1} size="middle">
@@ -933,10 +1140,24 @@ export default function App() {
               <Descriptions.Item label="Version">{installDefaults?.platform_version ?? wizard.image_tag.replace(/^v/, '')}</Descriptions.Item>
               <Descriptions.Item label="Install type">Single server</Descriptions.Item>
               <Descriptions.Item label="Administrator">{wizard.superadmin_username || '—'}</Descriptions.Item>
-              <Descriptions.Item label="Database">
+              <Descriptions.Item label="Platform DB">
                 {wizard.database.source === 'bundled' ? 'Included' : 'External'}
-                {' — '}
+                {' PostgreSQL — '}
                 {wizard.database.host}:{wizard.database.port}
+              </Descriptions.Item>
+              <Descriptions.Item label="Studio SQL">
+                {wizard.workspace_sql.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'}
+                {' — '}
+                {wizard.workspace_sql.engine === 'postgres' && wizard.workspace_sql.source === 'bundled'
+                  ? 'shared platform Postgres schemas'
+                  : `${wizard.workspace_sql.host}:${wizard.workspace_sql.port}`}
+              </Descriptions.Item>
+              <Descriptions.Item label="MongoDB">
+                {wizard.mongo.source === 'skip'
+                  ? 'Skipped'
+                  : wizard.mongo.source === 'bundled'
+                    ? `Included — ${wizard.mongo.host}:${wizard.mongo.port}`
+                    : `External — ${wizard.mongo.host}:${wizard.mongo.port}`}
               </Descriptions.Item>
               <Descriptions.Item label="Keycloak">
                 {wizard.keycloak.host}:{wizard.keycloak.port} ({wizard.keycloak.realm})
@@ -961,7 +1182,7 @@ export default function App() {
             </Button>
           </Card>
         );
-      case 10:
+      case 11:
         return (
           <Card title={jobKind === 'upgrade' ? 'Upgrading…' : 'Installing…'}>
             <Paragraph>
@@ -999,7 +1220,7 @@ export default function App() {
             </div>
           </Card>
         );
-      case 11:
+      case 12:
         return (
           <>
             <Result

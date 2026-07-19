@@ -27,6 +27,7 @@ class DatabaseValidateRequest(BaseModel):
     user: str
     password: str
     database: str = "postgres"
+    engine: str = "postgres"
 
 
 class DeployRequest(BaseModel):
@@ -40,6 +41,8 @@ class DeployRequest(BaseModel):
     superadmin_email: str | None = None
     license_key: str = ""
     database: dict[str, Any] = Field(default_factory=dict)
+    workspace_sql: dict[str, Any] = Field(default_factory=dict)
+    mongo: dict[str, Any] = Field(default_factory=dict)
     keycloak: dict[str, Any] = Field(default_factory=dict)
     redis: dict[str, Any] = Field(default_factory=dict)
     minio: dict[str, Any] = Field(default_factory=dict)
@@ -125,7 +128,24 @@ async def start_upgrade() -> dict[str, str]:
 
 @router.post("/validate/database")
 def validate_database(body: DatabaseValidateRequest) -> dict[str, str]:
+    engine = (body.engine or "postgres").strip().lower()
     try:
+        if engine == "mysql":
+            import pymysql
+
+            conn = pymysql.connect(
+                host=body.host,
+                port=body.port,
+                user=body.user,
+                password=body.password,
+                database=body.database if body.database != "postgres" else None,
+                connect_timeout=8,
+            )
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            conn.close()
+            return {"status": "ok"}
+
         import psycopg2
 
         conn = psycopg2.connect(

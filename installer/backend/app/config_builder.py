@@ -18,12 +18,68 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
     redis_cfg = wizard.get("redis") or {}
     minio_cfg = wizard.get("minio") or {}
     centrifugo_cfg = wizard.get("centrifugo") or {}
+    workspace_sql = wizard.get("workspace_sql") or {}
+    mongo_cfg = wizard.get("mongo") or {}
 
     kc_admin_password = (
         (kc.get("admin_password") or "").strip()
         or (wizard.get("kc_admin_password") or "").strip()
         or db_password
     )
+
+    ws_engine = (workspace_sql.get("engine") or "postgres").strip().lower()
+    if ws_engine not in {"postgres", "mysql"}:
+        raise ValueError("workspace_sql.engine must be 'postgres' or 'mysql'")
+    ws_source = workspace_sql.get("source") or "bundled"
+    ws_password = (workspace_sql.get("password") or "").strip() or db_password
+    if ws_engine == "postgres" and ws_source == "bundled":
+        # Reuse platform Postgres for studio schemas (dtorc_workspace).
+        ws_host = (db.get("host") or "").strip() or "postgres"
+        ws_port = int(db.get("port") or 5432)
+        ws_user = db.get("user", "elt")
+        ws_db_name = (
+            workspace_sql.get("database_name")
+            or db.get("workspace_db_name")
+            or "dtorc_workspace"
+        )
+        ws_password = db_password
+    elif ws_engine == "mysql" and ws_source == "bundled":
+        ws_host = (workspace_sql.get("host") or "").strip() or "mysql"
+        ws_port = int(workspace_sql.get("port") or 3306)
+        ws_user = workspace_sql.get("user") or "elt"
+        ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
+    else:
+        ws_host = (workspace_sql.get("host") or "").strip()
+        if not ws_host:
+            raise ValueError("workspace_sql.host is required for external workspace SQL")
+        ws_port = int(
+            workspace_sql.get("port") or (3306 if ws_engine == "mysql" else 5432)
+        )
+        ws_user = workspace_sql.get("user") or "elt"
+        ws_db_name = workspace_sql.get("database_name") or "dtorc_workspace"
+
+    mongo_source = (mongo_cfg.get("source") or "bundled").strip().lower()
+    if mongo_source not in {"bundled", "external", "skip"}:
+        raise ValueError("mongo.source must be 'bundled', 'external', or 'skip'")
+    mongo_password = (mongo_cfg.get("password") or "").strip() or db_password
+    if mongo_source == "bundled":
+        mongo_host = (mongo_cfg.get("host") or "").strip() or "mongo"
+        mongo_port = int(mongo_cfg.get("port") or 27017)
+        mongo_user = mongo_cfg.get("user") or "elt"
+        mongo_db_name = mongo_cfg.get("database_name") or "dtorc_mongo"
+    elif mongo_source == "external":
+        mongo_host = (mongo_cfg.get("host") or "").strip()
+        if not mongo_host:
+            raise ValueError("mongo.host is required for external MongoDB")
+        mongo_port = int(mongo_cfg.get("port") or 27017)
+        mongo_user = mongo_cfg.get("user") or "elt"
+        mongo_db_name = mongo_cfg.get("database_name") or "dtorc_mongo"
+    else:
+        mongo_host = ""
+        mongo_port = 27017
+        mongo_user = ""
+        mongo_db_name = ""
+        mongo_password = ""
 
     config: dict[str, Any] = {
         "version": "1",
@@ -41,6 +97,23 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
             "metadata_db_name": db.get("metadata_db_name", "dtorc_metadata"),
             "workspace_db_name": db.get("workspace_db_name", "dtorc_workspace"),
             "keycloak_db_name": db.get("keycloak_db_name", "keycloak"),
+        },
+        "workspace_sql": {
+            "engine": ws_engine,
+            "source": ws_source,
+            "host": ws_host,
+            "port": ws_port,
+            "user": ws_user,
+            "password": ws_password,
+            "database_name": ws_db_name,
+        },
+        "mongo": {
+            "source": mongo_source,
+            "host": mongo_host,
+            "port": mongo_port,
+            "user": mongo_user,
+            "password": mongo_password,
+            "database_name": mongo_db_name,
         },
         "keycloak": {
             "source": kc.get("source", "bundled"),
