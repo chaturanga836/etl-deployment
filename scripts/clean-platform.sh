@@ -90,6 +90,14 @@ docker network rm data-plane-net 2>/dev/null || true
 docker network rm elt-net 2>/dev/null || true
 
 rm -f "${ROOT_DIR}/.frontend-rebuild.env"
+rm -f "${ROOT_DIR}/.installer-state.env"
+rm -f "${ROOT_DIR}/.env.from-installer"
+rm -f "${ROOT_DIR}/.install.state.env"
+# Stale host .env can poison upgrade.sh / compose after a wipe — wizard regenerates state.
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  echo "Removing stale ${ROOT_DIR}/.env (wizard will recreate installer state)"
+  rm -f "${ROOT_DIR}/.env"
+fi
 
 echo ""
 echo "Cleanup complete. Remaining containers:"
