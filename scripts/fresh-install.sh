@@ -51,6 +51,8 @@ cat <<'EOF'
   • Removes platform + wizard + Postgres data + installer state
   • Leaves Jenkins, Dozzle, and other non-DT-Orch containers alone
   • After wizard starts: open http://<EC2-IP>:3000 and click Install
+  • Studio UI is built from latest elt-frontend on GitHub (default branch)
+    — push UI fixes to GitHub before install; set GITHUB_TOKEN if repo is private
 ================================================================
 
 EOF

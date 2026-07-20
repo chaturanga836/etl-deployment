@@ -393,7 +393,7 @@ build_install_frontend_image() {
   # shellcheck source=lib/frontend-install-build.sh
   source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
   frontend_install_patch_env_public_urls "$ef" || true
-  if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install"; then
+  if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install" "install"; then
     if [[ -n "${STATE_DIR:-}" ]]; then
       frontend_install_verify_image "$ef" || return 1
     fi

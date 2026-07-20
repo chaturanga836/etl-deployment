@@ -93,6 +93,16 @@ rm -f "${ROOT_DIR}/.frontend-rebuild.env"
 rm -f "${ROOT_DIR}/.installer-state.env"
 rm -f "${ROOT_DIR}/.env.from-installer"
 rm -f "${ROOT_DIR}/.install.state.env"
+# Stale frontend source/image can serve an old UI after fresh install.
+FRONTEND_SIBLING="$(dirname "$ROOT_DIR")/elt-frontend"
+if [[ -d "$FRONTEND_SIBLING" ]]; then
+  echo "Removing stale frontend source checkout: ${FRONTEND_SIBLING}"
+  rm -rf "$FRONTEND_SIBLING"
+fi
+if docker image inspect dt-orch-frontend:install >/dev/null 2>&1; then
+  echo "Removing stale frontend install image: dt-orch-frontend:install"
+  docker rmi -f dt-orch-frontend:install 2>/dev/null || true
+fi
 # Stale host .env can poison upgrade.sh / compose after a wipe — wizard regenerates state.
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   echo "Removing stale ${ROOT_DIR}/.env (wizard will recreate installer state)"

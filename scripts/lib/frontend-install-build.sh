@@ -395,13 +395,20 @@ frontend_install_assert_frontend_ready() {
   return 1
 }
 
-# Ref for checkout: ELT_FRONTEND_REF > IMAGE_TAG from .env > default branch (empty).
+# Ref for checkout:
+#   install  — ELT_FRONTEND_REF or repo default branch (latest UI; not pinned to VERSION)
+#   upgrade  — ELT_FRONTEND_REF or IMAGE_TAG from .env
 frontend_install_resolve_frontend_ref() {
   local env_file="${1:-}"
+  local purpose="${2:-upgrade}"
   local tag=""
 
   if [[ -n "${ELT_FRONTEND_REF:-}" ]]; then
     printf '%s' "$ELT_FRONTEND_REF"
+    return 0
+  fi
+
+  if [[ "$purpose" == "install" ]]; then
     return 0
   fi
 
@@ -514,10 +521,11 @@ frontend_install_sync_existing_checkout() {
 frontend_install_ensure_checkout() {
   local frontend_dir="$1"
   local env_file="${2:-}"
+  local purpose="${3:-upgrade}"
   local repo ref clone_url name parent clone_rc=0
 
   repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
-  ref="$(frontend_install_resolve_frontend_ref "$env_file")"
+  ref="$(frontend_install_resolve_frontend_ref "$env_file" "$purpose")"
   clone_url="$(frontend_install_clone_repo_url "$repo")"
 
   if frontend_install_host_dockerfile_exists "$frontend_dir"; then
@@ -729,6 +737,7 @@ frontend_install_build() {
   local root_dir="$1"
   local env_file="$2"
   local tag="${3:-dt-orch-frontend:install}"
+  local purpose="${4:-upgrade}"
   local frontend_dir=""
 
   [[ -f "$env_file" ]] || {
@@ -752,7 +761,7 @@ frontend_install_build() {
     return 1
   fi
 
-  if ! frontend_install_ensure_checkout "$frontend_dir" "$env_file"; then
+  if ! frontend_install_ensure_checkout "$frontend_dir" "$env_file" "$purpose"; then
     return 1
   fi
 
@@ -760,8 +769,12 @@ frontend_install_build() {
     return 1
   fi
 
+  local checkout_ref
+  checkout_ref="$(frontend_install_resolve_frontend_ref "$env_file" "$purpose")"
+
   echo "Building install frontend as ${tag}"
   echo "  source=${frontend_dir}"
+  echo "  git_ref=${checkout_ref:-default branch}"
   echo "  NEXT_PUBLIC_KC_URL=${kc_url}"
   echo "  NEXT_PUBLIC_API_URL=${api_url}"
 
@@ -804,7 +817,7 @@ frontend_install_ensure_upgrade_frontend() {
     return 0
   fi
 
-  if frontend_install_build "$root_dir" "$env_file" "$tag"; then
+  if frontend_install_build "$root_dir" "$env_file" "$tag" "upgrade"; then
     echo "Frontend rebuilt for upgrade (${tag}) with public Keycloak URLs."
     return 0
   fi
