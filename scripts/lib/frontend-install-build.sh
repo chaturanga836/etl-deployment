@@ -6,6 +6,43 @@ frontend_install_in_installer() {
   [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]
 }
 
+# Quote values with whitespace so `source .env` is safe (container dumps omit quotes).
+frontend_install_repair_env_file_for_shell() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 0
+  python3 - "$env_file" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().splitlines()
+changed = False
+out = []
+for line in lines:
+    if line.lstrip().startswith("#") or not line.strip():
+        out.append(line)
+        continue
+    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
+    if not match:
+        out.append(line)
+        continue
+    key, val = match.group(1), match.group(2)
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        out.append(line)
+        continue
+    if re.search(r"\s", val):
+        esc = val.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+        out.append(f'{key}="{esc}"')
+        changed = True
+    else:
+        out.append(line)
+if changed:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out) + "\n")
+    print(f"Repaired unquoted .env values in {path}")
+PY
+}
+
 # True when .env has enough config for compose (non-empty DATABASE_URL, no registry placeholder).
 frontend_install_env_is_usable() {
   local env_file="$1"
@@ -108,6 +145,8 @@ frontend_install_ensure_env_file() {
 
   env_file="$(frontend_install_resolve_env_file "$root_dir" "$state_dir")"
   if [[ -n "$env_file" && -f "$env_file" ]] && frontend_install_env_is_usable "$env_file"; then
+    frontend_install_repair_env_file_for_shell "$env_file"
+    frontend_install_persist_env_to_installer_volume "$env_file"
     echo "$env_file"
     return 0
   fi
@@ -127,6 +166,7 @@ frontend_install_ensure_env_file() {
   fi
 
   chmod 600 "$env_file" 2>/dev/null || true
+  frontend_install_repair_env_file_for_shell "$env_file"
   frontend_install_persist_env_to_installer_volume "$env_file"
   rm -f "${root_dir}/.installer-state.env"
   echo "$env_file"

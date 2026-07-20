@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# shellcheck source=lib/frontend-install-build.sh
+source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
+
 PROFILE=""
 CONFIG=""
 ROLE=""
@@ -54,39 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 repair_env_file_for_shell() {
-  local env_file="$1"
-  [[ -f "$env_file" ]] || return 0
-  python3 - "$env_file" <<'PY'
-import re
-import sys
-
-path = sys.argv[1]
-lines = open(path, encoding="utf-8").read().splitlines()
-changed = False
-out = []
-for line in lines:
-    if line.lstrip().startswith("#") or not line.strip():
-        out.append(line)
-        continue
-    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
-    if not match:
-        out.append(line)
-        continue
-    key, val = match.group(1), match.group(2)
-    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-        out.append(line)
-        continue
-    if re.search(r"\s", val):
-        esc = val.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
-        out.append(f'{key}="{esc}"')
-        changed = True
-    else:
-        out.append(line)
-if changed:
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(out) + "\n")
-    print(f"Repaired unquoted .env values in {path}")
-PY
+  frontend_install_repair_env_file_for_shell "$1"
 }
 
 apply_version_defaults_to_env() {

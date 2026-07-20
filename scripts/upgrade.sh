@@ -69,6 +69,8 @@ else
 fi
 rm -f "${env_file}.bak"
 
+frontend_install_repair_env_file_for_shell "$env_file"
+
 export ENV_FILE="$env_file"
 
 # shellcheck disable=SC1091
