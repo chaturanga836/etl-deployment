@@ -37,13 +37,24 @@ python scripts/generate-license.py --customer-id acme-corp --days 365
 
 The API validates `LICENSE_KEY` at startup in production.
 
-**AI / troubleshooting reference:** [AI_REFERENCE.md](AI_REFERENCE.md) (installer host paths, license keypairs, Cython gotchas).
+**AI / troubleshooting reference:** [AI_REFERENCE.md](AI_REFERENCE.md) — **start with §2 Direct path** (installer UI → Install → verify login). Covers host paths, license keypairs, Keycloak health, Cython gotchas.
+
+**Recovery rule:** fix in git → push → on host: `./scripts/fresh-install.sh --yes` → complete the **Install** step in the wizard again. Do not patch a failed install with manual scripts on the server.
 
 The installer mounts the Docker socket to run `docker compose` on your behalf. Stop the installer container after setup if you no longer need the wizard (`docker compose -f compose/installer.yml down`).
 
 ## Fresh install (new EC2 or broken platform)
 
-**Use one flow only.** Do not patch a half-working install with manual scripts (`bootstrap-*.py`, `pip install`, `rebuild-frontend-from-source.sh`, hand-edited `.env`). Fix bugs in `etl-deployment` / app repos, push, then run fresh install again.
+**Use one flow only.** Do not patch a half-working install with manual scripts (`bootstrap-*.py`, `pip install`, `rebuild-frontend-from-source.sh`, hand-edited `.env`). Fix bugs in `etl-deployment` / app repos, push, then run the **direct path** again:
+
+1. `./scripts/fresh-install.sh --yes` — redeploy installer UI
+2. Browser → complete all wizard steps → **Install**
+3. Verify `http://<host>/login`
+
+| What you fixed | Where to commit | Then on host |
+|----------------|-----------------|--------------|
+| Installer, compose, `install.sh`, Keycloak wait | `etl-deployment` | `git pull` → `fresh-install.sh --yes` → Install UI |
+| Studio API / frontend | `etl-back` / `elt-frontend` → release image → bump `VERSION` in `etl-deployment` | `git pull` → `fresh-install.sh --yes` → Install UI |
 
 ### First time on EC2
 

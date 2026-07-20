@@ -57,6 +57,36 @@ Release API images are built with `SOURCE_PROTECTION=1` (Cython + source strip).
 
 **Wizard steps:** Welcome → Type → Account → Database → License → Website → Confirm → Installing → Done
 
+### Direct path (mandatory — do not bypass)
+
+**The only supported install and recovery loop is the installer UI end-to-end.** Every fix must be validated by running this path again — not by patching a half-installed host.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. Deploy installer UI                                          │
+│    ./scripts/fresh-install.sh --yes   (or setup-ui.sh)          │
+│    → http://<host>:3000                                         │
+├─────────────────────────────────────────────────────────────────┤
+│ 2. Complete wizard → Confirm → Install (watch live logs)        │
+│    install.sh + Keycloak wait + bootstrap run inside wizard     │
+├─────────────────────────────────────────────────────────────────┤
+│ 3. Verify: http://<host>/login                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**When something breaks, always:**
+
+| What broke | Fix in repo | Then on host |
+|------------|-------------|--------------|
+| Installer / deploy scripts (`install.sh`, compose, Keycloak wait, bind mounts, license, wizard orchestrator) | **etl-deployment** → commit → push | `git pull` → `./scripts/fresh-install.sh --yes` → **full Install UI** again |
+| Studio app (API, worker, frontend login/UX) | **etl-back** / **elt-frontend** → tag → GHCR image → bump **etl-deployment** `VERSION` → push | `git pull` → `./scripts/fresh-install.sh --yes` → **full Install UI** again |
+
+**Never** validate a fix with host-side shortcuts (`bootstrap-*.py`, `pip install`, hand-edited `.env`, `docker compose up` one-offs, `rebuild-*-from-source.sh` on EC2). Those hide regressions; the direct path is the test.
+
+**After any etl-deployment change** that affects install (compose healthchecks, `install.sh`, installer backend/frontend): redeploy the installer container before retesting — `fresh-install.sh` does this automatically (`clean-platform` + `setup-ui.sh`).
+
+**Image-only upgrades** (no install-script change): `./scripts/upgrade.sh full` is OK for production hosts that are already healthy. For **debugging install failures** or **proving a fix**, use the direct path (`fresh-install.sh` + Install UI), not `upgrade.sh` alone.
+
 ### Alternative: CLI (no wizard)
 
 ```bash
@@ -91,6 +121,8 @@ Skips super-admin bootstrap UI flow; uses defaults from `VERSION` / `.env`. Good
 Compose: `compose/monolith.yml` (profile `full`).
 
 **Health:** installer `install.sh` waits for Keycloak at `http://host.docker.internal:8081/realms/master` when run inside the wizard container (not `localhost` — that is the installer itself). Then API health at `http://localhost/health` (via proxy on the host network). Bootstrap scripts run **inside the installer container** (Python + `httpx` preinstalled).
+
+**Keycloak 26 healthcheck (prevention):** Docker health must probe the **management port 9000** (`/health/ready`), not 8080. First boot on a fresh DB can take **5–10 minutes** (Quarkus augmentation + DB migrations). `compose/monolith.yml` uses `start_period: 600s`; `install.sh` must not abort on Docker `unhealthy` while the container is still running — HTTP readiness on `/realms/master` is the gate. See §9 Keycloak false unhealthy.
 
 **Post-install bootstrap (automatic via wizard only):**
 
@@ -346,6 +378,18 @@ Vendor-only exception: `rebuild-frontend-from-source.sh` and `rebuild-api-from-s
 
 **Agent rule:** do **not** tell users to `pip install httpx` or run bootstrap scripts on the host. Recreate the installer (`./scripts/setup-ui.sh` or `reinstall.sh`) so `extra_hosts` applies, then redo Install in the UI.
 
+### Keycloak install fails early: `container reported unhealthy` (~30s–2min)
+
+**Root cause:** Keycloak 26 exposes `/health/ready` on **port 9000** (management), not 8080. A healthcheck on 8080 always fails → Docker marks `unhealthy` while Keycloak is still booting. First boot on empty Postgres can take **5–10 minutes**; logs showing Quarkus augmentation / Infinispan are normal, not a crash.
+
+**Fix in code (etl-deployment):**
+
+- `compose/monolith.yml` — healthcheck targets `127.0.0.1:9000/health/ready`; `start_period: 600s`
+- `scripts/install.sh` — keep waiting on HTTP `/realms/master`; do not exit on Docker `unhealthy` unless the container **exited**
+- Remove deprecated hostname v1 env (`KC_PROXY`, `KC_HOSTNAME_STRICT_HTTPS`); use `KC_PROXY_HEADERS` + `KC_HOSTNAME_STRICT`
+
+**Recovery on host:** fix pushed → `./scripts/fresh-install.sh --yes` → full Install UI (direct path). Do not `docker compose up keycloak` alone and assume install is fixed.
+
 ### Keycloak admin shows "HTTPS required" on `http://<public-ip>:8081`
 
 **Root cause:** Keycloak rejects plain HTTP from **public** (non-private) IPs when hit directly on port 8081.
@@ -414,7 +458,8 @@ git pull
 
 ### Do
 
-- Prefer **wizard** (`setup-ui.sh`) for customer first-time install
+- **Always use the direct path** (§2): deploy installer UI → full wizard Install → verify `/login` — for first install **and** after every fix
+- Prefer **wizard** (`setup-ui.sh` / `fresh-install.sh`) for customer first-time install
 - Use **`./scripts/fresh-install.sh --yes`** when any install/platform piece is broken (standard recovery)
 - Set / verify `ETL_DEPLOYMENT_HOST_ROOT` when debugging installer deploys
 - Run `repair-license-keys.py` when license signature errors appear after `git pull`
@@ -437,6 +482,7 @@ git pull
 
 | Symptom | Likely file(s) |
 |---------|----------------|
+| Keycloak `unhealthy` during install (first boot) | `compose/monolith.yml` (healthcheck port 9000, `start_period`), `scripts/install.sh` (`wait_for_keycloak`) |
 | Bind mount / host path | `scripts/install.sh`, `scripts/setup-ui.sh`, `compose/installer.yml` |
 | License trial / signature | `installer/shared/license.py`, `scripts/repair-license-keys.py` |
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
@@ -471,4 +517,4 @@ etl-back/
 
 ---
 
-*Last updated for issues encountered in v1.0.0–v1.0.3 self-host installs: Cython/Pydantic `cors_allow_origins`, license keypair mismatch after git pull, installer `ETL_DEPLOYMENT_HOST_ROOT` bind-mount resolution, Keycloak bootstrap race (wait before realm import).*
+*Last updated for issues encountered in v1.0.0–v1.0.3 self-host installs: Cython/Pydantic `cors_allow_origins`, license keypair mismatch after git pull, installer `ETL_DEPLOYMENT_HOST_ROOT` bind-mount resolution, Keycloak bootstrap race (wait before realm import), Keycloak 26 healthcheck on port 9000 + long first-boot `start_period`, mandatory direct-path recovery via Install UI.*
