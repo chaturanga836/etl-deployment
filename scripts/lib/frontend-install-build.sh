@@ -395,17 +395,138 @@ frontend_install_assert_frontend_ready() {
   return 1
 }
 
+# Ref for checkout: ELT_FRONTEND_REF > IMAGE_TAG from .env > default branch (empty).
+frontend_install_resolve_frontend_ref() {
+  local env_file="${1:-}"
+  local tag=""
+
+  if [[ -n "${ELT_FRONTEND_REF:-}" ]]; then
+    printf '%s' "$ELT_FRONTEND_REF"
+    return 0
+  fi
+
+  if [[ -n "$env_file" && -f "$env_file" ]]; then
+    tag="$(frontend_install_read_env IMAGE_TAG "$env_file")"
+    if [[ -n "$tag" && "$tag" != "install" && "$tag" != "latest" ]]; then
+      printf '%s' "$tag"
+    fi
+  fi
+}
+
+frontend_install_sync_git_checkout() {
+  local frontend_dir="$1"
+  local ref="$2"
+  local clone_url="$3"
+
+  git -C "$frontend_dir" remote set-url origin "$clone_url"
+  if [[ -n "$ref" ]]; then
+    git -C "$frontend_dir" fetch --depth 1 origin "refs/tags/${ref}:refs/tags/${ref}" 2>/dev/null \
+      || git -C "$frontend_dir" fetch --depth 1 origin "$ref" \
+      || return 1
+    git -C "$frontend_dir" checkout --force "$ref" || return 1
+  else
+    local branch="master"
+    git -C "$frontend_dir" fetch --depth 1 origin || return 1
+    branch="$(git -C "$frontend_dir" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')"
+    branch="${branch:-master}"
+    git -C "$frontend_dir" checkout --force "$branch" 2>/dev/null \
+      || git -C "$frontend_dir" checkout --force master \
+      || return 1
+    git -C "$frontend_dir" reset --hard "origin/${branch}" || return 1
+  fi
+
+  [[ -f "${frontend_dir}/Dockerfile" ]]
+}
+
+frontend_install_sync_git_checkout_docker() {
+  local parent="$1"
+  local name="$2"
+  local ref="$3"
+  local clone_url="$4"
+
+  if [[ -n "$ref" ]]; then
+    docker run --rm \
+      -v "${parent}:/work" \
+      alpine:3.20 sh -ec "
+        apk add --no-cache git >/dev/null
+        cd /work/${name}
+        test -d .git
+        git remote set-url origin '${clone_url}'
+        git fetch --depth 1 origin 'refs/tags/${ref}:refs/tags/${ref}' 2>/dev/null || git fetch --depth 1 origin '${ref}'
+        git checkout --force '${ref}'
+        test -f Dockerfile
+      "
+  else
+    docker run --rm \
+      -v "${parent}:/work" \
+      alpine:3.20 sh -ec "
+        apk add --no-cache git >/dev/null
+        cd /work/${name}
+        test -d .git
+        git remote set-url origin '${clone_url}'
+        git fetch --depth 1 origin
+        branch=\$(git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+        branch=\${branch:-master}
+        git checkout --force \"\$branch\" 2>/dev/null || git checkout --force master
+        git reset --hard \"origin/\$branch\"
+        test -f Dockerfile
+      "
+  fi
+}
+
+frontend_install_remove_frontend_dir() {
+  local frontend_dir="$1"
+  local name parent
+
+  name="$(basename "$frontend_dir")"
+  parent="$(dirname "$frontend_dir")"
+
+  if frontend_install_in_installer; then
+    docker run --rm -v "${parent}:/work" alpine:3.20 sh -ec "rm -rf /work/${name}" || true
+  elif [[ -d "$frontend_dir" ]]; then
+    rm -rf "$frontend_dir"
+  fi
+}
+
+# Refresh an existing elt-frontend checkout before rebuild (upgrade/install).
+frontend_install_sync_existing_checkout() {
+  local frontend_dir="$1"
+  local ref="$2"
+  local clone_url="$3"
+  local name parent
+
+  [[ -d "${frontend_dir}/.git" ]] || return 1
+
+  echo "Updating existing frontend source at ${frontend_dir} (ref=${ref:-default branch}) ..."
+
+  if ! frontend_install_in_installer && command -v git >/dev/null 2>&1; then
+    if frontend_install_sync_git_checkout "$frontend_dir" "$ref" "$clone_url"; then
+      return 0
+    fi
+    echo "WARN: Host git sync failed; trying docker git sync ..."
+  fi
+
+  name="$(basename "$frontend_dir")"
+  parent="$(dirname "$frontend_dir")"
+  frontend_install_sync_git_checkout_docker "$parent" "$name" "$ref" "$clone_url"
+}
+
 frontend_install_ensure_checkout() {
   local frontend_dir="$1"
+  local env_file="${2:-}"
   local repo ref clone_url name parent clone_rc=0
 
   repo="${ELT_FRONTEND_REPO_HTTPS:-https://github.com/chaturanga836/elt-frontend.git}"
-  ref="${ELT_FRONTEND_REF:-}"
+  ref="$(frontend_install_resolve_frontend_ref "$env_file")"
   clone_url="$(frontend_install_clone_repo_url "$repo")"
 
   if frontend_install_host_dockerfile_exists "$frontend_dir"; then
-    echo "Using existing frontend source at ${frontend_dir}"
-    return 0
+    if frontend_install_sync_existing_checkout "$frontend_dir" "$ref" "$clone_url"; then
+      echo "Frontend source ready at ${frontend_dir}"
+      return 0
+    fi
+    echo "WARN: Could not update existing frontend checkout — recloning ..."
+    frontend_install_remove_frontend_dir "$frontend_dir"
   fi
 
   name="$(basename "$frontend_dir")"
@@ -631,7 +752,7 @@ frontend_install_build() {
     return 1
   fi
 
-  if ! frontend_install_ensure_checkout "$frontend_dir"; then
+  if ! frontend_install_ensure_checkout "$frontend_dir" "$env_file"; then
     return 1
   fi
 
