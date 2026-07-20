@@ -312,10 +312,8 @@ services:
       KEYCLOAK_ADMIN: ${KC_ADMIN_USER:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-changeme}
       KC_HOSTNAME_STRICT: "false"
-      KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_PROXY: edge
       KC_PROXY_HEADERS: xforwarded
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
@@ -326,12 +324,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 3 cat <&3 | grep -q '200'",
+          "{ printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/127.0.0.1/9000",
         ]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 30
-      start_period: 120s
+      retries: 40
+      start_period: 600s
     networks:
       - elt-net
 

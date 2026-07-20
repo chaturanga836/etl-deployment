@@ -482,11 +482,13 @@ wait_for_keycloak() {
     status="unknown"
     if docker ps --format '{{.Names}}' | grep -qx 'elt-keycloak'; then
       status="$(docker inspect elt-keycloak --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' 2>/dev/null || echo missing)"
-      if [[ "$status" == "unhealthy" ]]; then
-        echo "Keycloak container reported unhealthy."
-        show_keycloak_failure_logs
-        return 1
+      if [[ "$status" == "unhealthy" && $((i % 15)) -eq 0 ]]; then
+        echo "  ... Keycloak Docker health is unhealthy (first boot can take 5–10 min); still probing HTTP..."
       fi
+    elif docker ps -a --format '{{.Names}}' | grep -qx 'elt-keycloak'; then
+      echo "Keycloak container exited before becoming ready."
+      show_keycloak_failure_logs
+      return 1
     fi
 
     if [[ "$i" -eq "$attempts" ]]; then
