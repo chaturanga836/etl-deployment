@@ -13,6 +13,47 @@ def _running_inside_installer() -> bool:
     return os.path.isfile("/.dockerenv") and os.path.exists("/var/run/docker.sock")
 
 
+def _keycloak_reachable(probe_url: str) -> tuple[bool, str]:
+    """Return (ok, last_error). Uses host-network wget from installer when possible."""
+    port = os.getenv("KEYCLOAK_PORT", "8081")
+    last_error = "no response"
+    if _running_inside_installer():
+        import subprocess
+
+        try:
+            subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    "host",
+                    "alpine:3.20",
+                    "wget",
+                    "-q",
+                    "-O",
+                    "/dev/null",
+                    f"http://127.0.0.1:{port}/realms/master",
+                ],
+                check=True,
+                capture_output=True,
+                timeout=15,
+            )
+            return True, ""
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            last_error = str(exc)
+
+    try:
+        with httpx.Client(timeout=10.0, verify=False) as client:
+            resp = client.get(probe_url)
+            if resp.status_code == 200:
+                return True, ""
+            last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+    except httpx.HTTPError as exc:
+        last_error = str(exc)
+    return False, last_error
+
+
 def kc_base() -> str:
     """Keycloak base URL reachable from the process running bootstrap."""
     port = os.getenv("KEYCLOAK_PORT", "8081")
@@ -31,22 +72,17 @@ def kc_base() -> str:
     return base
 
 
-def wait_for_keycloak(*, attempts: int = 90, sleep_seconds: float = 2.0) -> None:
+def wait_for_keycloak(*, attempts: int = 180, sleep_seconds: float = 2.0) -> None:
     """Block until Keycloak accepts HTTP on the bootstrap URL."""
     base = kc_base()
     probe_url = f"{base}/realms/master"
     last_error = "no response"
 
-    with httpx.Client(timeout=10.0, verify=False) as client:
-        for _ in range(attempts):
-            try:
-                resp = client.get(probe_url)
-                if resp.status_code == 200:
-                    return
-                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
-            except httpx.HTTPError as exc:
-                last_error = str(exc)
-            time.sleep(sleep_seconds)
+    for _ in range(attempts):
+        ok, last_error = _keycloak_reachable(probe_url)
+        if ok:
+            return
+        time.sleep(sleep_seconds)
 
     raise RuntimeError(
         f"Keycloak not ready at {probe_url} after {attempts} attempts: {last_error}"

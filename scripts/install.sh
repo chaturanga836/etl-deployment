@@ -442,6 +442,19 @@ keycloak_bootstrap_base() {
   echo "${base%/}"
 }
 
+# HTTP probe for Keycloak — from the wizard container use host networking (127.0.0.1:8081).
+keycloak_http_ready() {
+  local url="$1"
+  local port="${KEYCLOAK_PORT:-8081}"
+  if running_installer_with_docker_sock; then
+    docker run --rm --network host alpine:3.20 \
+      wget -q -O /dev/null "http://127.0.0.1:${port}/realms/master" 2>/dev/null \
+      || curl -sf "$url" >/dev/null 2>&1
+    return
+  fi
+  curl -sf "$url" >/dev/null 2>&1
+}
+
 # Host-published service URL when install.sh runs inside the wizard container.
 host_loopback_base() {
   local port="$1"
@@ -453,20 +466,52 @@ host_loopback_base() {
 }
 
 wait_for_keycloak() {
-  local kc_url
+  local kc_url attempts sleep_sec i status
   kc_url="$(keycloak_bootstrap_base)/realms/master"
-  echo "Waiting for Keycloak at ${kc_url}..."
-  for i in $(seq 1 90); do
-    if curl -sf "$kc_url" >/dev/null 2>&1; then
+  attempts="${KEYCLOAK_WAIT_ATTEMPTS:-180}"
+  sleep_sec="${KEYCLOAK_WAIT_SLEEP:-2}"
+  echo "Waiting for Keycloak at ${kc_url} (up to $((attempts * sleep_sec))s)..."
+
+  if docker ps --format '{{.Names}}' | grep -qx 'elt-keycloak'; then
+    echo "Waiting for elt-keycloak container health (first boot on fresh DB can take several minutes)..."
+    for i in $(seq 1 90); do
+      status="$(docker inspect elt-keycloak --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' 2>/dev/null || echo missing)"
+      case "$status" in
+        healthy)
+          echo "Keycloak container is healthy."
+          break
+          ;;
+        unhealthy)
+          echo "Keycloak container reported unhealthy."
+          show_keycloak_failure_logs
+          return 1
+          ;;
+      esac
+      if [[ "$i" -eq 90 ]]; then
+        echo "WARN: Keycloak container not healthy after 450s — continuing HTTP probe..."
+        show_keycloak_failure_logs
+      fi
+      if [[ $((i % 6)) -eq 0 ]]; then
+        echo "  ... Keycloak still starting (${status}, ~$((i * 5))s elapsed)"
+      fi
+      sleep 5
+    done
+  fi
+
+  for i in $(seq 1 "$attempts"); do
+    if keycloak_http_ready "$kc_url"; then
       echo "Keycloak is ready."
       return 0
     fi
-    if [[ "$i" -eq 90 ]]; then
+    if [[ "$i" -eq "$attempts" ]]; then
       echo "Keycloak health check timed out."
       show_keycloak_failure_logs
       return 1
     fi
-    sleep 2
+    if [[ $((i % 15)) -eq 0 ]]; then
+      echo "  ... HTTP probe still waiting (~$((i * sleep_sec))s elapsed)"
+    fi
+    sleep "$sleep_sec"
   done
 }
 
