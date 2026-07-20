@@ -39,7 +39,7 @@ for line in lines:
 if changed:
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(out) + "\n")
-    print(f"Repaired unquoted .env values in {path}")
+    print(f"Repaired unquoted .env values in {path}", file=sys.stderr)
 PY
 }
 
@@ -663,9 +663,9 @@ frontend_install_patch_env_public_urls() {
     fi
   done
   rm -f "${env_file}.bak"
-  echo "Patched public URLs in ${env_file}:"
-  echo "  NEXT_PUBLIC_KC_URL=${kc_url}"
-  echo "  NEXT_PUBLIC_API_URL=${api_url}"
+  echo "Patched public URLs in ${env_file}:" >&2
+  echo "  NEXT_PUBLIC_KC_URL=${kc_url}" >&2
+  echo "  NEXT_PUBLIC_API_URL=${api_url}" >&2
 }
 
 frontend_install_pin_frontend_image() {

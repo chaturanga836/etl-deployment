@@ -51,10 +51,17 @@ if ! env_file="$(frontend_install_ensure_env_file "$ROOT_DIR" "$STATE_DIR")"; th
   exit 1
 fi
 
+# Keep only the final path line — helpers must log to stderr, but harden against stdout noise.
+env_file="$(printf '%s\n' "$env_file" | awk 'NF{line=$0} END{print line}')"
+
 # Compose interpolates env_file: ${ENV_FILE} relative to the compose file dir
 # (compose/). Relative paths like ".env" wrongly become compose/.env.
 if [[ "$env_file" != /* ]]; then
   env_file="${ROOT_DIR}/${env_file}"
+fi
+if [[ ! -f "$env_file" ]]; then
+  echo "ERROR: Resolved env file does not exist: ${env_file}" >&2
+  exit 1
 fi
 env_file="$(cd "$(dirname "$env_file")" && pwd)/$(basename "$env_file")"
 
