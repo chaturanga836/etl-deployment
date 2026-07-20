@@ -25,6 +25,10 @@ Default PROFILE is "full".
 Resolves installer .env from (in order):
   ENV_FILE, STATE_DIR, installer_state volume, /opt/etl-deployment-state, repo .env
 
+If .env is missing, empty, or incomplete, recovers automatically from the
+running dt-orch-api container or installer deployment.json, then syncs image
+pins from VERSION.
+
 Examples:
   bash scripts/upgrade.sh full
   STATE_DIR=/opt/etl-deployment-state bash scripts/upgrade.sh full
@@ -42,11 +46,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   git pull --ff-only origin "$branch" || echo "WARN: git pull failed; using local VERSION"
 fi
 
-env_file="$(frontend_install_resolve_env_file "$ROOT_DIR" "$STATE_DIR")"
-if [[ -z "$env_file" || ! -f "$env_file" ]]; then
-  echo "ERROR: No installer .env found."
-  echo "Expected one of: ENV_FILE, STATE_DIR/.env, installer_state volume, /opt/etl-deployment-state/.env, ${ROOT_DIR}/.env"
-  echo "Run the install wizard first, or: STATE_DIR=/opt/etl-deployment-state bash scripts/upgrade.sh full"
+if ! env_file="$(frontend_install_ensure_env_file "$ROOT_DIR" "$STATE_DIR")"; then
   exit 1
 fi
 

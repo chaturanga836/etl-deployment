@@ -6,16 +6,143 @@ frontend_install_in_installer() {
   [[ -f /.dockerenv ]] && [[ -S /var/run/docker.sock ]]
 }
 
+# True when .env has enough config for compose (non-empty DATABASE_URL, no registry placeholder).
+frontend_install_env_is_usable() {
+  local env_file="$1"
+  [[ -f "$env_file" && -s "$env_file" ]] || return 1
+  grep -qE '^DATABASE_URL=.+' "$env_file" || return 1
+  if grep -qE '^API_IMAGE=.*YOUR_GITHUB_ORG' "$env_file" 2>/dev/null; then
+    return 1
+  fi
+  if grep -qE '^REGISTRY_URL=.*YOUR_GITHUB_ORG' "$env_file" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+frontend_install_find_installer_state_volume() {
+  local vol mount vol_name
+  for vol in etl-deployment_installer_state compose_installer_state installer_state dt-orch_installer_state; do
+    if docker volume inspect "$vol" >/dev/null 2>&1; then
+      echo "$vol"
+      return 0
+    fi
+  done
+  while read -r vol_name; do
+    [[ -n "$vol_name" ]] || continue
+    echo "$vol_name"
+    return 0
+  done < <(docker volume ls -q | grep -E 'installer_state$' || true)
+  return 1
+}
+
+frontend_install_copy_volume_env() {
+  local vol="$1"
+  local dest="$2"
+  local mount
+  mount=$(docker volume inspect "$vol" --format '{{ .Mountpoint }}' 2>/dev/null || true)
+  if [[ -n "$mount" && -s "$mount/.env" ]]; then
+    cp "$mount/.env" "$dest"
+    return 0
+  fi
+  if docker run --rm -v "${vol}:/state:ro" alpine:3.20 test -s /state/.env 2>/dev/null; then
+    docker run --rm -v "${vol}:/state:ro" alpine:3.20 cat /state/.env >"$dest"
+    [[ -s "$dest" ]]
+    return
+  fi
+  return 1
+}
+
+frontend_install_persist_env_to_installer_volume() {
+  local env_file="$1"
+  local vol
+  vol="$(frontend_install_find_installer_state_volume || true)"
+  [[ -n "$vol" && -f "$env_file" ]] || return 0
+  docker run --rm -v "${vol}:/state" -v "${env_file}:/env:ro" alpine:3.20 cp /env /state/.env
+}
+
+# Rebuild .env from the running stack or installer deployment.json (no manual steps).
+frontend_install_recover_env_file() {
+  local root_dir="$1"
+  local out_file="$2"
+  local vol deployment_json out_dir
+
+  if docker ps --format '{{.Names}}' | grep -qx 'dt-orch-api'; then
+    docker inspect dt-orch-api --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | LC_ALL=C sort >"$out_file"
+    if frontend_install_env_is_usable "$out_file"; then
+      echo "Recovered .env from running dt-orch-api container" >&2
+      return 0
+    fi
+    rm -f "$out_file"
+  fi
+
+  vol="$(frontend_install_find_installer_state_volume || true)"
+  if [[ -n "$vol" ]] && docker run --rm -v "${vol}:/state:ro" alpine:3.20 test -s /state/deployment.json 2>/dev/null; then
+    deployment_json="${root_dir}/.deployment-recover.json"
+    out_dir="$(dirname "$out_file")"
+    docker run --rm -v "${vol}:/state:ro" alpine:3.20 cat /state/deployment.json >"$deployment_json"
+    if [[ -s "$deployment_json" ]]; then
+      python3 "${root_dir}/renderer/render.py" --config "$deployment_json" --out "$out_dir" >/dev/null
+      rm -f "$deployment_json"
+      if [[ -f "${out_dir}/.env" ]]; then
+        mv "${out_dir}/.env" "$out_file"
+        if frontend_install_env_is_usable "$out_file"; then
+          echo "Recovered .env from installer deployment.json" >&2
+          return 0
+        fi
+      fi
+    fi
+    rm -f "$deployment_json"
+  fi
+
+  rm -f "$out_file"
+  return 1
+}
+
+# Resolve installer .env; auto-recover when missing, empty, or wiped (e.g. after partial clean).
+frontend_install_ensure_env_file() {
+  local root_dir="$1"
+  local state_dir="${2:-}"
+  local env_file=""
+
+  env_file="$(frontend_install_resolve_env_file "$root_dir" "$state_dir")"
+  if [[ -n "$env_file" && -f "$env_file" ]] && frontend_install_env_is_usable "$env_file"; then
+    echo "$env_file"
+    return 0
+  fi
+
+  if [[ -n "$env_file" && -f "$env_file" ]]; then
+    echo "WARN: Installer .env is missing or incomplete (${env_file}) — recovering automatically..." >&2
+  else
+    echo "WARN: No usable installer .env found — recovering automatically..." >&2
+  fi
+
+  env_file="${root_dir}/.env"
+  if ! frontend_install_recover_env_file "$root_dir" "$env_file"; then
+    echo "ERROR: Could not recover installer .env." >&2
+    echo "  Stack not running and no deployment.json in installer state volume." >&2
+    echo "  Run: bash scripts/fresh-install.sh --yes" >&2
+    return 1
+  fi
+
+  chmod 600 "$env_file" 2>/dev/null || true
+  frontend_install_persist_env_to_installer_volume "$env_file"
+  rm -f "${root_dir}/.installer-state.env"
+  echo "$env_file"
+  return 0
+}
+
 frontend_install_resolve_env_file() {
   local root_dir="$1"
   local state_dir="${2:-}"
 
-  if [[ -n "${ENV_FILE:-}" && -f "${ENV_FILE}" ]]; then
+  if [[ -n "${ENV_FILE:-}" && -f "${ENV_FILE}" && -s "${ENV_FILE}" ]]; then
     echo "${ENV_FILE}"
     return
   fi
 
-  if [[ -n "$state_dir" && -f "${state_dir}/.env" ]]; then
+  if [[ -n "$state_dir" && -s "${state_dir}/.env" ]]; then
     echo "${state_dir}/.env"
     return
   fi
@@ -23,17 +150,20 @@ frontend_install_resolve_env_file() {
   for vol in etl-deployment_installer_state compose_installer_state installer_state dt-orch_installer_state; do
     local mount
     mount=$(docker volume inspect "$vol" --format '{{ .Mountpoint }}' 2>/dev/null || true)
-    if [[ -n "$mount" && -f "$mount/.env" ]]; then
+    if [[ -n "$mount" && -s "$mount/.env" ]]; then
       echo "$mount/.env"
       return
     fi
     # Volume mountpoints are often root-only on Linux — read via a throwaway container.
     if docker volume inspect "$vol" >/dev/null 2>&1; then
-      if docker run --rm -v "${vol}:/state:ro" alpine:3.20 test -f /state/.env 2>/dev/null; then
+      if docker run --rm -v "${vol}:/state:ro" alpine:3.20 test -s /state/.env 2>/dev/null; then
         local tmp="${root_dir}/.installer-state.env"
         docker run --rm -v "${vol}:/state:ro" alpine:3.20 cat /state/.env >"$tmp"
-        echo "$tmp"
-        return
+        if [[ -s "$tmp" ]]; then
+          echo "$tmp"
+          return
+        fi
+        rm -f "$tmp"
       fi
     fi
   done
@@ -43,29 +173,32 @@ frontend_install_resolve_env_file() {
   while read -r vol_name; do
     [[ -n "$vol_name" ]] || continue
     mount=$(docker volume inspect "$vol_name" --format '{{ .Mountpoint }}' 2>/dev/null || true)
-    if [[ -n "$mount" && -f "$mount/.env" ]]; then
+    if [[ -n "$mount" && -s "$mount/.env" ]]; then
       echo "$mount/.env"
       return
     fi
-    if docker run --rm -v "${vol_name}:/state:ro" alpine:3.20 test -f /state/.env 2>/dev/null; then
+    if docker run --rm -v "${vol_name}:/state:ro" alpine:3.20 test -s /state/.env 2>/dev/null; then
       local tmp="${root_dir}/.installer-state.env"
       docker run --rm -v "${vol_name}:/state:ro" alpine:3.20 cat /state/.env >"$tmp"
-      echo "$tmp"
-      return
+      if [[ -s "$tmp" ]]; then
+        echo "$tmp"
+        return
+      fi
+      rm -f "$tmp"
     fi
   done < <(docker volume ls -q | grep -E 'installer_state$' || true)
 
-  if [[ -f "${root_dir}/.install.state.env" ]]; then
+  if [[ -s "${root_dir}/.install.state.env" ]]; then
     echo "${root_dir}/.install.state.env"
     return
   fi
 
-  if [[ -f "${root_dir}/.env" ]]; then
+  if [[ -s "${root_dir}/.env" ]]; then
     echo "${root_dir}/.env"
     return
   fi
 
-  if [[ -f "/opt/etl-deployment-state/.env" ]]; then
+  if [[ -s "/opt/etl-deployment-state/.env" ]]; then
     echo "/opt/etl-deployment-state/.env"
     return
   fi
