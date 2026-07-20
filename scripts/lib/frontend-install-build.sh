@@ -146,6 +146,7 @@ frontend_install_ensure_env_file() {
   env_file="$(frontend_install_resolve_env_file "$root_dir" "$state_dir")"
   if [[ -n "$env_file" && -f "$env_file" ]] && frontend_install_env_is_usable "$env_file"; then
     frontend_install_repair_env_file_for_shell "$env_file"
+    frontend_install_patch_env_public_urls "$env_file"
     frontend_install_persist_env_to_installer_volume "$env_file"
     echo "$env_file"
     return 0
@@ -167,6 +168,7 @@ frontend_install_ensure_env_file() {
 
   chmod 600 "$env_file" 2>/dev/null || true
   frontend_install_repair_env_file_for_shell "$env_file"
+  frontend_install_patch_env_public_urls "$env_file"
   frontend_install_persist_env_to_installer_volume "$env_file"
   rm -f "${root_dir}/.installer-state.env"
   echo "$env_file"
@@ -666,4 +668,34 @@ frontend_install_build() {
   fi
 
   frontend_install_pin_frontend_image "$env_file" "$tag"
+}
+
+# Registry FRONTEND_IMAGE bakes localhost Keycloak URLs — rebuild like install.sh before compose up.
+frontend_install_ensure_upgrade_frontend() {
+  local root_dir="$1"
+  local env_file="$2"
+  local tag="${3:-dt-orch-frontend:install}"
+
+  frontend_install_patch_env_public_urls "$env_file"
+
+  if [[ "${UPGRADE_REBUILD_FRONTEND:-true}" != "true" ]]; then
+    echo "UPGRADE_REBUILD_FRONTEND=false — skipping frontend rebuild (Keycloak login may break on registry images)."
+    return 0
+  fi
+
+  if frontend_install_build "$root_dir" "$env_file" "$tag"; then
+    echo "Frontend rebuilt for upgrade (${tag}) with public Keycloak URLs."
+    return 0
+  fi
+
+  if docker image inspect "$tag" >/dev/null 2>&1; then
+    frontend_install_pin_frontend_image "$env_file" "$tag"
+    echo "Using existing ${tag} (registry image would redirect login to localhost:8081)."
+    return 0
+  fi
+
+  echo "ERROR: Frontend rebuild failed and no local ${tag} image exists." >&2
+  echo "  Registry images ship with NEXT_PUBLIC_KC_URL=http://localhost:8081." >&2
+  echo "  Recovery: bash scripts/fresh-install.sh --yes  (complete Install UI wizard)" >&2
+  return 1
 }

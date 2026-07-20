@@ -27,7 +27,8 @@ Resolves installer .env from (in order):
 
 If .env is missing, empty, or incomplete, recovers automatically from the
 running dt-orch-api container or installer deployment.json, then syncs image
-pins from VERSION.
+pins from VERSION. Rebuilds the frontend with your public host (Keycloak via
+nginx on APP_URL) so login does not redirect to localhost:8081.
 
 Examples:
   bash scripts/upgrade.sh full
@@ -81,6 +82,17 @@ set +a
 
 NEW_TAG="${IMAGE_TAG:-v1.0.0}"
 echo "Upgrading to image tag: ${NEW_TAG}"
+
+if [[ ( -z "$ROLE" && ( "$PROFILE" == "full" || "$PROFILE" == "frontend" ) ) || "$ROLE" == "frontend" ]]; then
+  if ! frontend_install_ensure_upgrade_frontend "$ROOT_DIR" "$env_file"; then
+    exit 1
+  fi
+  frontend_install_persist_env_to_installer_volume "$env_file"
+  # shellcheck disable=SC1091
+  set -a
+  source "$env_file"
+  set +a
+fi
 
 compose_args=(-f "${ROOT_DIR}/compose/monolith.yml")
 if [[ -f "${ROOT_DIR}/compose/docker-compose.dev.yml" ]] && [[ "${ELT_DEV_BUILD:-false}" == "true" ]]; then
