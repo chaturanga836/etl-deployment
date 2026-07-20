@@ -485,14 +485,21 @@ frontend_install_remove_frontend_dir() {
   local frontend_dir="$1"
   local name parent
 
+  [[ -d "$frontend_dir" ]] || return 0
+
   name="$(basename "$frontend_dir")"
   parent="$(dirname "$frontend_dir")"
 
-  if frontend_install_in_installer; then
+  # Docker git clone / build leaves root-owned files on the host — rm as root via container.
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     docker run --rm -v "${parent}:/work" alpine:3.20 sh -ec "rm -rf /work/${name}" || true
-  elif [[ -d "$frontend_dir" ]]; then
-    rm -rf "$frontend_dir"
+    [[ ! -e "$frontend_dir" ]] && return 0
   fi
+
+  rm -rf "$frontend_dir" 2>/dev/null || sudo rm -rf "$frontend_dir" 2>/dev/null || {
+    echo "WARN: Could not remove ${frontend_dir} — run: sudo rm -rf ${frontend_dir}" >&2
+    return 1
+  }
 }
 
 # Refresh an existing elt-frontend checkout before rebuild (upgrade/install).

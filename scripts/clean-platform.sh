@@ -97,7 +97,16 @@ rm -f "${ROOT_DIR}/.install.state.env"
 FRONTEND_SIBLING="$(dirname "$ROOT_DIR")/elt-frontend"
 if [[ -d "$FRONTEND_SIBLING" ]]; then
   echo "Removing stale frontend source checkout: ${FRONTEND_SIBLING}"
-  rm -rf "$FRONTEND_SIBLING"
+  FE_PARENT="$(dirname "$FRONTEND_SIBLING")"
+  FE_NAME="$(basename "$FRONTEND_SIBLING")"
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    docker run --rm -v "${FE_PARENT}:/work" alpine:3.20 sh -ec "rm -rf /work/${FE_NAME}" || true
+  else
+    rm -rf "$FRONTEND_SIBLING" 2>/dev/null || sudo rm -rf "$FRONTEND_SIBLING" 2>/dev/null || true
+  fi
+  if [[ -d "$FRONTEND_SIBLING" ]]; then
+    echo "WARN: Could not remove ${FRONTEND_SIBLING} — run: sudo rm -rf ${FRONTEND_SIBLING}" >&2
+  fi
 fi
 if docker image inspect dt-orch-frontend:install >/dev/null 2>&1; then
   echo "Removing stale frontend install image: dt-orch-frontend:install"
