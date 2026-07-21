@@ -8,7 +8,13 @@ from pathlib import Path
 
 import click
 
-from dtorch_cli.client import EltClientError, apply_migrations, fetch_applied_versions, get_access_token, make_client
+from dtorch_cli.client import (
+    EltClientError,
+    apply_migrations,
+    fetch_applied_versions,
+    has_auth,
+    make_client,
+)
 from dtorch_cli.config import (
     DEFAULT_CONFIG_DIR,
     DEFAULT_MIGRATIONS_DIR,
@@ -121,9 +127,17 @@ def migration_list(root: Path) -> None:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
 
+    if not has_auth():
+        click.echo(
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET "
+            "(or DTORCH_ACCESS_TOKEN for Studio JWT fallback).",
+            err=True,
+        )
+        raise SystemExit(1)
+
     local = scan_local_migrations(migrations_dir(root))
     try:
-        client = make_client(api_url)
+        client = make_client(api_url, workspace_id)
         applied = fetch_applied_versions(client, workspace_id, database_id)
     except EltClientError as exc:
         click.echo(f"API error ({exc.status_code}): {exc}", err=True)
@@ -158,9 +172,10 @@ def db_push(root: Path, yes: bool, dry_run: bool) -> None:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
 
-    if not get_access_token():
+    if not has_auth():
         click.echo(
-            "Set DTORCH_ACCESS_TOKEN (or ELT_ACCESS_TOKEN) to a valid Keycloak bearer token.",
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET "
+            "(or DTORCH_ACCESS_TOKEN for Studio JWT fallback).",
             err=True,
         )
         raise SystemExit(1)
@@ -171,7 +186,7 @@ def db_push(root: Path, yes: bool, dry_run: bool) -> None:
         return
 
     try:
-        client = make_client(api_url)
+        client = make_client(api_url, workspace_id)
         applied = fetch_applied_versions(client, workspace_id, database_id)
     except EltClientError as exc:
         click.echo(f"API error ({exc.status_code}): {exc}", err=True)
