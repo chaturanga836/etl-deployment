@@ -13,6 +13,7 @@ dependencies = [
     "tomli-w>=1.0.0",
     "httpx>=0.28.0",
     "dtorch-sdk>=0.2.0",
+    "python-dotenv>=1.0.0",
 ]
 license = { text = "MIT" }
 

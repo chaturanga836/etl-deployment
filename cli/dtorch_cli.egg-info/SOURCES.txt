@@ -4,6 +4,7 @@ dtorch_cli/__init__.py
 dtorch_cli/__main__.py
 dtorch_cli/client.py
 dtorch_cli/config.py
+dtorch_cli/envfile.py
 dtorch_cli/main.py
 dtorch_cli/migrations.py
 dtorch_cli.egg-info/PKG-INFO
@@ -12,3 +13,4 @@ dtorch_cli.egg-info/dependency_links.txt
 dtorch_cli.egg-info/entry_points.txt
 dtorch_cli.egg-info/requires.txt
 dtorch_cli.egg-info/top_level.txt
+tests/test_envfile.py

@@ -21,12 +21,21 @@ Do **not** require customers to clone platform repos for day-to-day use — publ
 
 ## Authentication
 
-Prefer Studio **project key + secret** (same credentials as your app SDK):
+Put project credentials in a project-root `.env` (loaded automatically, like Supabase):
 
 ```bash
-export DTORCH_PROJECT_KEY="pk_..."
-export DTORCH_PROJECT_SECRET="ps_..."
+# .env  (gitignored)
+DTORCH_PROJECT_KEY=pk_...
+DTORCH_PROJECT_SECRET=ps_...
 ```
+
+Then:
+
+```bash
+dtorch db push -y
+```
+
+Existing shell env vars win over `.env` (not overridden).
 
 Optional fallback for interactive Studio users:
 
@@ -87,6 +96,8 @@ Legacy `elt/` config directories are still read if `dtorch/` is not present.
     dtorch link --api-url $DTORCH_API_URL --workspace $WORKSPACE_ID --database $DATABASE_ID
     dtorch db push -y
 ```
+
+Locally you can omit exporting secrets if they live in a gitignored `.env`.
 
 ## Golden rule
 

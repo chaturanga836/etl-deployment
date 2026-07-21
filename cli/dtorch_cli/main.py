@@ -23,6 +23,7 @@ from dtorch_cli.config import (
     require_link,
     save_config,
 )
+from dtorch_cli.envfile import load_project_env
 from dtorch_cli.migrations import migration_status_rows, pending_migrations, scan_local_migrations
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -31,12 +32,14 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 @click.group()
 def cli() -> None:
     """Dtorch CLI — database migrations for workspace databases."""
+    load_project_env(Path.cwd())
 
 
 @cli.command()
 @click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
 def init(root: Path) -> None:
     """Create dtorch/ with config.toml and migrations/ directory."""
+    load_project_env(root)
     config_dir = root / DEFAULT_CONFIG_DIR
     migrations = root / DEFAULT_MIGRATIONS_DIR
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -70,6 +73,7 @@ def init(root: Path) -> None:
 @click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
 def link(api_url: str, workspace_id: int, database_id: int, root: Path) -> None:
     """Save API URL and workspace/database targeting to dtorch/config.toml."""
+    load_project_env(root)
     config_dir = root / DEFAULT_CONFIG_DIR
     if not config_dir.exists():
         click.echo("Run `dtorch init` first.", err=True)
@@ -98,6 +102,7 @@ def migration() -> None:
 @click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
 def migration_new(name: str, root: Path) -> None:
     """Create a new timestamped migration file under dtorch/migrations/."""
+    load_project_env(root)
     normalized = name.strip().lower().replace("-", "_")
     if not _NAME_RE.match(normalized):
         click.echo("Name must use lowercase letters, digits, and underscores.", err=True)
@@ -120,6 +125,7 @@ def migration_new(name: str, root: Path) -> None:
 @click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
 def migration_list(root: Path) -> None:
     """Show local migration files vs remote applied status."""
+    load_project_env(root)
     try:
         config = load_config(root)
         api_url, workspace_id, database_id = require_link(config)
@@ -129,7 +135,7 @@ def migration_list(root: Path) -> None:
 
     if not has_auth():
         click.echo(
-            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET "
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET in .env "
             "(or DTORCH_ACCESS_TOKEN for Studio JWT fallback).",
             err=True,
         )
@@ -165,6 +171,7 @@ def db() -> None:
 @click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
 def db_push(root: Path, yes: bool, dry_run: bool) -> None:
     """Apply pending local migrations to the remote database."""
+    load_project_env(root)
     try:
         config = load_config(root)
         api_url, workspace_id, database_id = require_link(config)
@@ -174,7 +181,7 @@ def db_push(root: Path, yes: bool, dry_run: bool) -> None:
 
     if not has_auth():
         click.echo(
-            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET "
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET in .env "
             "(or DTORCH_ACCESS_TOKEN for Studio JWT fallback).",
             err=True,
         )
