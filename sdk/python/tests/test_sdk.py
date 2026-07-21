@@ -56,6 +56,49 @@ def test_platform_validate_uses_project_credentials(monkeypatch: pytest.MonkeyPa
     assert request["headers"]["Authorization"] == "Bearer ps_test"
 
 
+def test_platform_apply_migrations_uses_project_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request: dict[str, Any] = {}
+
+    def fake_request(
+        self: HttpTransport,
+        method: str,
+        path: str,
+        json: Any = None,
+    ) -> dict[str, Any]:
+        request.update(
+            method=method,
+            path=path,
+            headers=self.headers(),
+            json=json,
+        )
+        return {
+            "ok": True,
+            "dry_run": False,
+            "applied_versions": ["20260718100000_create_demo_jobs"],
+            "statements_executed": 1,
+        }
+
+    monkeypatch.setattr(HttpTransport, "request", fake_request)
+    client = DtorchPlatformClient(
+        "https://dtorch.example/",
+        project_key="pk_test",
+        project_secret="ps_test",
+        workspace_id=42,
+    )
+
+    result = client.apply_database_migrations(
+        1,
+        [{"version": "20260718100000_create_demo_jobs", "sql": "CREATE TABLE demo_jobs (id int);"}],
+    )
+    assert result["applied_versions"] == ["20260718100000_create_demo_jobs"]
+    assert request["method"] == "POST"
+    assert request["path"] == "/api/v1/workspaces/42/databases/1/migrations/apply"
+    assert request["headers"]["X-Project-Key"] == "pk_test"
+    assert request["headers"]["Authorization"] == "Bearer ps_test"
+
+
 def test_update_by_pk_only_updates_changes() -> None:
     class FakeClient:
         sql = ""

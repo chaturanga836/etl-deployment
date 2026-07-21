@@ -39,25 +39,24 @@ users.update_by_pk({"id": 1}, {"name": "Ada Lovelace"})
 
 ## Database migrations
 
-Requires a bearer token with `workspace_admin` on the target workspace.
+Prefer **project key + secret** (same as runtime). Studio JWT remains a fallback.
 
 ```python
 import os
-from dtorch import DtorchClient
+from dtorch import DtorchPlatformClient
 
-client = DtorchClient(
+client = DtorchPlatformClient(
     "https://api.example.com",
-    get_access_token=lambda: os.environ["DTORCH_ACCESS_TOKEN"],
+    project_key=os.environ["DTORCH_PROJECT_KEY"],
+    project_secret=os.environ["DTORCH_PROJECT_SECRET"],
+    workspace_id=42,
 )
 
-# List applied migrations on a workspace database
-history = client.list_database_migrations(workspace_id=42, database_id=1)
+history = client.list_database_migrations(1)
 for row in history["migrations"]:
     print(row["version"], row["applied_at"])
 
-# Apply pending migrations (from local files or your own loader)
 client.apply_database_migrations(
-    42,
     1,
     [
         {
@@ -72,16 +71,19 @@ client.apply_database_migrations(
 For local git-based workflows, use the [dtorch CLI](../cli/README.md):
 
 ```bash
-pip install ../cli
+pip install dtorch-cli
+export DTORCH_PROJECT_KEY=pk_...
+export DTORCH_PROJECT_SECRET=ps_...
 dtorch init && dtorch link --api-url https://api.example.com --workspace 42 --database 1
 dtorch migration new create_users
-dtorch db push
+dtorch db push -y
 ```
 
 ## Environment
 
 | Variable | Description |
 |----------|-------------|
-| `DTORCH_ACCESS_TOKEN` | Keycloak JWT (used by CLI; pass to SDK via `get_access_token`) |
+| `DTORCH_PROJECT_KEY` / `DTORCH_PROJECT_SECRET` | Project credentials (preferred for apps + CLI migrations) |
+| `DTORCH_ACCESS_TOKEN` | Optional Studio JWT fallback |
 | `ELT_ACCESS_TOKEN` | Alias for `DTORCH_ACCESS_TOKEN` |
 | `DTORCH_API_URL` / `ELT_API_URL` | API base URL (CLI `dtorch link` writes this to `dtorch/config.toml`) |

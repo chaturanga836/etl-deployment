@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlencode
 
 from dtorch.database import DatabaseContext
@@ -97,6 +97,25 @@ class DtorchPlatformClient:
             "POST",
             f"/api/v1/workspaces/{self.workspace_id}/databases/{database_id}/sql",
             {"sql": sql},
+        )
+
+    def list_database_migrations(self, database_id: int) -> Dict[str, Any]:
+        return self._http.request(
+            "GET",
+            f"/api/v1/workspaces/{self.workspace_id}/databases/{database_id}/migrations",
+        )
+
+    def apply_database_migrations(
+        self,
+        database_id: int,
+        migrations: List[Dict[str, str]],
+        *,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        return self._http.request(
+            "POST",
+            f"/api/v1/workspaces/{self.workspace_id}/databases/{database_id}/migrations/apply",
+            {"migrations": migrations, "dry_run": dry_run},
         )
 
 

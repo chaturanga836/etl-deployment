@@ -21,13 +21,20 @@ Do **not** require customers to clone platform repos for day-to-day use — publ
 
 ## Authentication
 
-Export a Keycloak bearer token with `workspace_admin` access to the target workspace:
+Prefer Studio **project key + secret** (same credentials as your app SDK):
+
+```bash
+export DTORCH_PROJECT_KEY="pk_..."
+export DTORCH_PROJECT_SECRET="ps_..."
+```
+
+Optional fallback for interactive Studio users:
 
 ```bash
 export DTORCH_ACCESS_TOKEN="your-jwt-here"
 ```
 
-`ELT_ACCESS_TOKEN` is also accepted for backward compatibility.
+`ELT_PROJECT_KEY` / `ELT_PROJECT_SECRET` / `ELT_ACCESS_TOKEN` are also accepted.
 
 ## Quickstart
 
@@ -73,9 +80,10 @@ Legacy `elt/` config directories are still read if `dtorch/` is not present.
 ```yaml
 - name: Push migrations
   env:
-    DTORCH_ACCESS_TOKEN: ${{ secrets.DTORCH_ACCESS_TOKEN }}
+    DTORCH_PROJECT_KEY: ${{ secrets.DTORCH_PROJECT_KEY }}
+    DTORCH_PROJECT_SECRET: ${{ secrets.DTORCH_PROJECT_SECRET }}
   run: |
-    pip install ./sdk/python ./cli
+    pip install dtorch-cli
     dtorch link --api-url $DTORCH_API_URL --workspace $WORKSPACE_ID --database $DATABASE_ID
     dtorch db push -y
 ```
