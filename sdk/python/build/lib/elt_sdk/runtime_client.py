@@ -93,3 +93,47 @@ class EltRuntimeClient:
                 "body": body,
             },
         )
+
+    def queue_push(
+        self,
+        queue_name: str,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Push a message onto a queue. Requires scope queue:push."""
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/queues/{queue_name}/push",
+            json={"payload": payload or {}},
+        )
+
+    def queue_pop(self, queue_name: str) -> Optional[Dict[str, Any]]:
+        """Pop the oldest message (destructive — message is removed). Requires scope queue:pop.
+
+        Returns None if the queue is empty.
+        """
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/queues/{queue_name}/pop",
+        )
+
+    def notification_publish(
+        self,
+        channel: str,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+        target: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Publish a realtime notification. Requires scope notification:publish."""
+        body: Dict[str, Any] = {"channel": channel, "payload": payload or {}}
+        if target is not None:
+            body["target"] = target
+        return self._request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self._workspace_id}/notifications/publish",
+            json=body,
+        )
+
+
+# Keep direct ``elt_sdk.runtime_client`` imports on the canonical implementation.
+from dtorch.runtime_client import DtorchRuntimeClient as EltRuntimeClient  # noqa: E402,F401,F811

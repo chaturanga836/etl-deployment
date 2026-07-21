@@ -12,6 +12,7 @@ dependencies = [
     "click>=8.1.0",
     "tomli-w>=1.0.0",
     "httpx>=0.28.0",
+    "dtorch-sdk>=0.2.0",
 ]
 license = { text = "MIT" }
 

@@ -98,3 +98,8 @@ class EltClient:
             f"/api/v1/workspaces/{workspace_id}/databases/{database_id}/migrations/apply",
             {"migrations": migrations, "dry_run": dry_run},
         )
+
+
+# Keep direct ``elt_sdk.client`` imports on the canonical implementation.
+from dtorch.client import DtorchClient as EltClient  # noqa: E402,F401,F811
+from dtorch.errors import DtorchApiError as EltClientError  # noqa: E402,F401,F811

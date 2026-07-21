@@ -4,12 +4,20 @@ Supabase-style database migrations for Dtorch workspace databases. Keep versione
 
 ## Install
 
-From the `etl-deployment` repo root:
+```bash
+pip install dtorch-cli
+# pulls dtorch-sdk automatically once both are on PyPI
+dtorch --help
+# or: python -m dtorch_cli --help
+```
+
+Until PyPI publish, install both packages from the platform checkout:
 
 ```bash
-pip install ./sdk/python
-pip install ./cli
+pip install ./sdk/python ./cli
 ```
+
+Do **not** require customers to clone platform repos for day-to-day use — publish wheels and install via `pip install dtorch-cli`.
 
 ## Authentication
 
