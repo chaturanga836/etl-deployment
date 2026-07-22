@@ -402,8 +402,10 @@ build_install_frontend_image() {
   fi
   if [[ -n "${STATE_DIR:-}" ]] || [[ "$DEV_BUILD" == true ]]; then
     echo "ERROR: Frontend build failed — cannot install with registry image (localhost Keycloak URLs)." >&2
-    echo "Common causes: private elt-frontend repo (clone needs GITHUB_TOKEN), npm build OOM." >&2
-    echo "On the EC2 host:" >&2
+    echo "Common causes: disk full (df -h /), Docker bloat (docker system df)," >&2
+    echo "  private elt-frontend repo (clone needs GITHUB_TOKEN), npm build OOM." >&2
+    echo "Free space on the EC2 host, then:" >&2
+    echo "  docker builder prune -af && docker system prune -af" >&2
     echo "  git clone https://<GITHUB_PAT>@github.com/chaturanga836/elt-frontend.git \$(dirname \"\$PWD\")/elt-frontend" >&2
     echo "  bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
     return 1

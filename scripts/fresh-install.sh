@@ -16,7 +16,8 @@ Usage: fresh-install.sh [OPTIONS]
 Official install / recovery (same flow for new EC2 or broken platform):
 
   1. git pull
-  2. clean-platform.sh  — remove ALL DT Orch containers, volumes, wizard state
+  2. clean-platform.sh  — remove ALL DT Orch containers/volumes/networks,
+                          plus dead/unused images, volumes, networks, build cache
   3. setup-ui.sh        — start Install UI on port 3000
 
 Then in the browser: complete every wizard step → Install → login.
@@ -49,7 +50,8 @@ cat <<'EOF'
   DT Orch — fresh install (clean slate)
 ================================================================
   • Removes platform + wizard + Postgres data + installer state
-  • Leaves Jenkins, Dozzle, and other non-DT-Orch containers alone
+  • Prunes dead/unused Docker images, volumes, networks, and build cache
+  • Leaves Jenkins, Dozzle, and other non-DT-Orch running containers alone
   • After wizard starts: open http://<EC2-IP>:3000 and click Install
   • Studio UI is built from latest elt-frontend on GitHub (default branch)
     — push UI fixes to GitHub before install; set GITHUB_TOKEN if repo is private

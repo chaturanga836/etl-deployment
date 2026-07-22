@@ -78,7 +78,7 @@ cd ~/etl-deployment
 ### What `fresh-install.sh` does
 
 1. `git pull` — latest installer scripts and `VERSION`
-2. `clean-platform.sh` — stops and removes all DT Orch containers, volumes (Postgres, wizard state), per-org Centrifugo brokers, and `data-plane-net`
+2. `clean-platform.sh` — stops and removes all DT Orch containers, volumes (Postgres, wizard state), per-org Centrifugo brokers, and `data-plane-net`; also prunes unused Docker images, volumes, networks, and build cache
 3. `setup-ui.sh` — starts Install UI on port **3000**
 
 ### In the browser

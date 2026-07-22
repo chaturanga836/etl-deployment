@@ -15,8 +15,10 @@ Stops and removes:
   - Monolith stack (api, worker, postgres, mysql, mongo, redis, keycloak, frontend, nginx, infra, scraper)
   - Setup wizard (dt-orch-installer)
   - Related Docker volumes and dt-orch networks
+  - Dead/unused Docker images, volumes, networks, and build cache
+    (images still used by running containers such as Jenkins/Dozzle are kept)
 
-Does NOT remove: Jenkins, Dozzle, or other unrelated containers.
+Does NOT remove: Jenkins, Dozzle, or other unrelated running containers.
 
 Options:
   --yes, -y     Skip confirmation
@@ -35,7 +37,8 @@ done
 if [[ "$ASSUME_YES" != true ]]; then
   cat <<'EOF'
 This removes ALL DT Orch platform data (Postgres volumes, installer state, etc.).
-Jenkins and Dozzle are left running.
+Also prunes unused Docker images, volumes, networks, and build cache.
+Jenkins and Dozzle are left running (their images stay if those containers are up).
 
 Continue? [y/N]
 EOF
@@ -116,6 +119,20 @@ fi
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   echo "Removing stale ${ROOT_DIR}/.env (wizard will recreate installer state)"
   rm -f "${ROOT_DIR}/.env"
+fi
+
+# Free disk for the next frontend/on-host build. Images still referenced by
+# running containers (Jenkins, Dozzle, etc.) are kept; everything else goes.
+echo "=== Pruning dead Docker images, volumes, networks, build cache ==="
+docker container prune -f 2>/dev/null || true
+docker network prune -f 2>/dev/null || true
+docker volume prune -f 2>/dev/null || true
+docker image prune -af 2>/dev/null || true
+docker builder prune -af 2>/dev/null || true
+if command -v docker >/dev/null 2>&1; then
+  echo "Disk after prune:"
+  docker system df 2>/dev/null || true
+  df -h / 2>/dev/null || true
 fi
 
 echo ""
