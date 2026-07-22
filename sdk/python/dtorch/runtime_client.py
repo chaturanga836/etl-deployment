@@ -105,6 +105,30 @@ class DtorchRuntimeClient:
             request_body,
         )
 
+    def cron_push_logs(
+        self,
+        job_name: str,
+        *,
+        message: str,
+        level: str = "info",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Push a cron history log entry (requires ``cron:log`` scope).
+
+        Always callable; the platform stores the row only when the job has
+        ``history_log`` enabled.
+        """
+        return self._http.request(
+            "POST",
+            f"/api/v1/runtime/workspaces/{self.workspace_id}/cron-jobs/"
+            f"{quote(job_name, safe='')}/logs",
+            {
+                "message": message,
+                "level": level,
+                "metadata": metadata or {},
+            },
+        )
+
 
 # Backward-compatible class name.
 EltRuntimeClient = DtorchRuntimeClient

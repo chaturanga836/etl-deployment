@@ -114,4 +114,29 @@ export class EltRuntimeClient {
       { channel, payload: payload ?? {}, ...(target ? { target } : {}) },
     );
   }
+
+  /**
+   * Push a cron history log entry (requires `cron:log` scope).
+   * Always callable; platform stores the row only when the job has history_log enabled.
+   */
+  cronPushLogs(
+    jobName: string,
+    entry: { message: string; level?: string; metadata?: Record<string, unknown> },
+  ) {
+    return requestJson<{
+      accepted: boolean;
+      reason?: string | null;
+      id?: number | null;
+      created_at?: string | null;
+    }>(
+      this.http,
+      "POST",
+      `/api/v1/runtime/workspaces/${this.workspaceId}/cron-jobs/${encodeURIComponent(jobName)}/logs`,
+      {
+        message: entry.message,
+        level: entry.level ?? "info",
+        metadata: entry.metadata ?? {},
+      },
+    );
+  }
 }

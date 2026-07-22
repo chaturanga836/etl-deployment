@@ -97,9 +97,16 @@ test("platform storage and runtime use the same project credentials", async () =
 
   await client.storage.listObjects("demo/");
   await client.runtime.queuePush("events", { hello: "world" });
+  await client.runtime.cronPushLogs("demo-jobs", {
+    message: "tick #1",
+    level: "info",
+    metadata: { ok: true },
+  });
 
   assert.match(requests[0].url, /storage\/objects\?prefix=demo%2F$/);
   assert.match(requests[1].url, /runtime\/workspaces\/42\/queues\/events\/push$/);
+  assert.match(requests[2].url, /runtime\/workspaces\/42\/cron-jobs\/demo-jobs\/logs$/);
+  assert.equal(JSON.parse(requests[2].init.body).message, "tick #1");
   for (const request of requests) {
     assert.equal(request.init.headers["X-Project-Key"], "pk_test");
     assert.equal(request.init.headers.Authorization, "Bearer ps_test");

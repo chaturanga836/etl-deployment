@@ -58,5 +58,19 @@ export declare class EltRuntimeClient {
         recipient_count: number;
         published: boolean;
     }>;
+    /**
+     * Push a cron history log entry (requires `cron:log` scope).
+     * Always callable; platform stores the row only when the job has history_log enabled.
+     */
+    cronPushLogs(jobName: string, entry: {
+        message: string;
+        level?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<{
+        accepted: boolean;
+        reason?: string | null;
+        id?: number | null;
+        created_at?: string | null;
+    }>;
 }
 export {};

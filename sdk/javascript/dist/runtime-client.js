@@ -46,5 +46,16 @@ class EltRuntimeClient {
     notificationPublish(channel, payload, target) {
         return (0, http_1.requestJson)(this.http, "POST", `/api/v1/runtime/workspaces/${this.workspaceId}/notifications/publish`, { channel, payload: payload ?? {}, ...(target ? { target } : {}) });
     }
+    /**
+     * Push a cron history log entry (requires `cron:log` scope).
+     * Always callable; platform stores the row only when the job has history_log enabled.
+     */
+    cronPushLogs(jobName, entry) {
+        return (0, http_1.requestJson)(this.http, "POST", `/api/v1/runtime/workspaces/${this.workspaceId}/cron-jobs/${encodeURIComponent(jobName)}/logs`, {
+            message: entry.message,
+            level: entry.level ?? "info",
+            metadata: entry.metadata ?? {},
+        });
+    }
 }
 exports.EltRuntimeClient = EltRuntimeClient;

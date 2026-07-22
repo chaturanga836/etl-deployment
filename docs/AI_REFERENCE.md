@@ -452,8 +452,12 @@ git pull
   administration, provisioning, migrations/DDL, and project credential rotation.
 - A customer-facing auth service for end-user integrations is planned but does not
   exist yet. Do not invent or imply that API.
-- Celery workers support immediate execution; cron/Celery Beat scheduling is not
-  implemented yet. Do not invent schedule endpoints.
+- Celery workers support immediate execution; **Celery Beat scheduling is not
+  implemented yet**. Cron **job definitions + optional history logs** exist:
+  Studio CRUD under `/workspaces/{id}/cron-jobs` (with per-job `history_log`),
+  and SDK `runtime.cronPushLogs` under
+  `/runtime/workspaces/{id}/cron-jobs/{name}/logs` (scope `cron:log`). Do not
+  invent Beat schedule-dispatch endpoints until Beat ships.
 - [SDK_MDA.md](SDK_MDA.md) is the detailed SDK and credential contract.
 
 ### Do

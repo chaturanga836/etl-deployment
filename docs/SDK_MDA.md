@@ -497,8 +497,9 @@ When adding or changing SDK/CLI code:
 7. Add parity notes to §9 when a language still lags.
 8. Do not invent a fourth auth mode without updating §4 and backend auth services.
 9. Do not add Keycloak login/token handling to customer apps or app-facing examples.
-10. Cron/Celery Beat and customer-facing auth services are not implemented; do not
-    invent those APIs.
+10. Celery Beat schedule dispatch and customer-facing auth services are not
+    implemented; do not invent those APIs. Cron job definitions + SDK
+    `cronPushLogs` / Studio history (when `history_log` is on) are in scope.
 
 ---
 
