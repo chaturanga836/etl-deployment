@@ -23,7 +23,8 @@ function sqlLiteral(value) {
         return String(value);
     if (typeof value === "boolean")
         return value ? "TRUE" : "FALSE";
-    return `'${String(value).replace(/'/g, "''")}'`;
+    // Escape `:` so SQLAlchemy text() does not treat JSON like `"index":1` as bind `:1`.
+    return `'${String(value).replace(/'/g, "''").replace(/:/g, "\\:")}'`;
 }
 function primaryKeyColumns(columns) {
     const pk = columns.filter((col) => col.primary_key).map((col) => col.name);

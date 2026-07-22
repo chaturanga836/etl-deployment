@@ -13,7 +13,8 @@ export function sqlLiteral(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
-  return `'${String(value).replace(/'/g, "''")}'`;
+  // Escape `:` so SQLAlchemy text() does not treat JSON like `"index":1` as bind `:1`.
+  return `'${String(value).replace(/'/g, "''").replace(/:/g, "\\:")}'`;
 }
 
 export function primaryKeyColumns(columns: WorkspaceDatabaseTableColumn[]): string[] {
