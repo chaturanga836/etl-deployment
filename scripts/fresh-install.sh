@@ -53,8 +53,8 @@ cat <<'EOF'
   • Prunes dead/unused Docker images, volumes, networks, and build cache
   • Leaves Jenkins, Dozzle, and other non-DT-Orch running containers alone
   • After wizard starts: open http://<EC2-IP>:3000 and click Install
-  • Studio UI is built from latest elt-frontend on GitHub (default branch)
-    — push UI fixes to GitHub before install; set GITHUB_TOKEN if repo is private
+  • Studio UI is pulled from GHCR (CI-built). Baked localhost URLs are rewritten
+    to the page origin in the browser — no elt-frontend clone on this host
 ================================================================
 
 EOF

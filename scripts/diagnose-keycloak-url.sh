@@ -75,8 +75,9 @@ if docker ps --format '{{.Names}}' | grep -qx 'dt-orch-frontend'; then
   echo "  image=${image}"
   if [[ "$image" == ghcr.io/* ]]; then
     echo ""
-    echo "  PROBLEM: Registry frontend image — ships with NEXT_PUBLIC_KC_URL=http://localhost:8081."
-    echo "  FIX: bash scripts/rebuild-frontend-from-source.sh --public-host ${public_host}"
+    echo "  Registry frontend image (expected). Baked NEXT_PUBLIC_* is localhost;"
+    echo "  Studio rewrites to page origin at runtime. Confirm KC-DEBUG resolvedBaseUrl"
+    echo "  is http://${public_host} (not localhost:8081)."
   fi
 else
   echo "WARN: dt-orch-frontend container is not running."
@@ -108,7 +109,8 @@ echo ""
 if [[ -n "${env_file:-}" && -f "${env_file:-}" ]]; then
   kc_val="$(frontend_install_read_env NEXT_PUBLIC_KC_URL "$env_file")"
   if [[ "$kc_val" == *localhost* || "$kc_val" == *127.0.0.1* ]]; then
-    echo "FIX: .env still has localhost Keycloak URL. Rebuild frontend:"
-    echo "  bash scripts/rebuild-frontend-from-source.sh --public-host ${public_host}"
+    echo "NOTE: .env NEXT_PUBLIC_KC_URL is localhost (normal for GHCR images)."
+    echo "  Browser rewrite should still use http://${public_host}."
+    echo "  If login still hits localhost:8081, check nginx /realms/ proxy and KC-DEBUG."
   fi
 fi

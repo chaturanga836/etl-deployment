@@ -27,8 +27,9 @@ Resolves installer .env from (in order):
 
 If .env is missing, empty, or incomplete, recovers automatically from the
 running dt-orch-api container or installer deployment.json, then syncs image
-pins from VERSION. Rebuilds the frontend with your public host (Keycloak via
-nginx on APP_URL) so login does not redirect to localhost:8081.
+pins from VERSION. Pulls the CI-built GHCR frontend (Studio rewrites baked
+localhost Keycloak/API URLs to the page origin). Set UPGRADE_REBUILD_FRONTEND=true
+only for vendor on-host rebuilds.
 
 Examples:
   bash scripts/upgrade.sh full

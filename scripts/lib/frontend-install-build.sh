@@ -708,18 +708,17 @@ frontend_install_restore_registry_frontend_image() {
   echo "Using registry frontend image: ${image}"
 }
 
-# Wizard installs must use a locally built frontend — registry images bake localhost Keycloak URLs.
+# Registry images bake localhost NEXT_PUBLIC_* URLs; Studio rewrites them to the
+# page origin at runtime. GHCR images are the default install path.
 frontend_install_verify_image() {
   local env_file="$1"
   local image
   image="$(frontend_install_read_env FRONTEND_IMAGE "$env_file")"
-  if [[ "$image" == ghcr.io/* ]]; then
-    echo "ERROR: Wizard install is using registry frontend (${image})." >&2
-    echo "       Registry images ship with NEXT_PUBLIC_KC_URL=http://localhost:8081." >&2
-    echo "       Re-run install after fixing the frontend build, or run:" >&2
-    echo "       bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
+  if [[ -z "$image" ]]; then
+    echo "ERROR: FRONTEND_IMAGE is empty in ${env_file}." >&2
     return 1
   fi
+  echo "FRONTEND_IMAGE=${image}"
   return 0
 }
 
@@ -811,7 +810,8 @@ frontend_install_build() {
   frontend_install_pin_frontend_image "$env_file" "$tag"
 }
 
-# Registry FRONTEND_IMAGE bakes localhost Keycloak URLs — rebuild like install.sh before compose up.
+# Default: keep GHCR FRONTEND_IMAGE (runtime localhost → page-origin rewrite).
+# Opt into on-host rebuild with UPGRADE_REBUILD_FRONTEND=true (vendor/dev only).
 frontend_install_ensure_upgrade_frontend() {
   local root_dir="$1"
   local env_file="$2"
@@ -819,24 +819,28 @@ frontend_install_ensure_upgrade_frontend() {
 
   frontend_install_patch_env_public_urls "$env_file"
 
-  if [[ "${UPGRADE_REBUILD_FRONTEND:-true}" != "true" ]]; then
-    echo "UPGRADE_REBUILD_FRONTEND=false — skipping frontend rebuild (Keycloak login may break on registry images)."
+  if [[ "${UPGRADE_REBUILD_FRONTEND:-false}" != "true" ]]; then
+    frontend_install_restore_registry_frontend_image "$env_file" || true
+    local image
+    image="$(frontend_install_read_env FRONTEND_IMAGE "$env_file")"
+    echo "Using registry frontend for upgrade: ${image:-FRONTEND_IMAGE from .env}"
+    echo "  (baked localhost URLs rewritten to page origin in the browser)"
     return 0
   fi
 
   if frontend_install_build "$root_dir" "$env_file" "$tag" "upgrade"; then
-    echo "Frontend rebuilt for upgrade (${tag}) with public Keycloak URLs."
+    echo "Frontend rebuilt for upgrade (${tag})."
     return 0
   fi
 
   if docker image inspect "$tag" >/dev/null 2>&1; then
     frontend_install_pin_frontend_image "$env_file" "$tag"
-    echo "Using existing ${tag} (registry image would redirect login to localhost:8081)."
+    echo "Using existing ${tag} after rebuild failure."
     return 0
   fi
 
-  echo "ERROR: Frontend rebuild failed and no local ${tag} image exists." >&2
-  echo "  Registry images ship with NEXT_PUBLIC_KC_URL=http://localhost:8081." >&2
-  echo "  Recovery: bash scripts/fresh-install.sh --yes  (complete Install UI wizard)" >&2
+  echo "ERROR: Frontend rebuild failed (UPGRADE_REBUILD_FRONTEND=true) and no local ${tag} image exists." >&2
+  echo "  Unset UPGRADE_REBUILD_FRONTEND to pull the GHCR image, or:" >&2
+  echo "  bash scripts/fresh-install.sh --yes  (complete Install UI wizard)" >&2
   return 1
 }

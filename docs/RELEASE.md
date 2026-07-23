@@ -30,13 +30,17 @@ Set `registry.public: false` in [VERSION](VERSION) only for enterprise customers
 
 ## One-time setup (GitHub)
 
-1. **Frontend build URLs (optional)** — In `elt-frontend` repo → Settings → Secrets and variables → Actions → Variables:
-   - `NEXT_PUBLIC_API_URL` (e.g. `https://studio.example.com/api/v1`)
+1. **Frontend build URLs (leave unset for multi-customer installs)** — Release CI bakes
+   localhost defaults (`http://localhost/api/v1`, `http://localhost:8081`). Studio
+   rewrites those to `window.location.origin` at runtime so one GHCR image works for
+   every customer IP/domain.
+
+   Optional GitHub Actions Variables on `elt-frontend` (only for a **single fixed**
+   production domain — do **not** set a customer EC2 IP here):
+   - `NEXT_PUBLIC_API_URL`
    - `NEXT_PUBLIC_KC_URL`
    - `NEXT_PUBLIC_KC_REALM` (default `workspace-realm`)
    - `NEXT_PUBLIC_KC_CLIENT_ID` (default `workspace-web`)
-
-If unset, release builds use localhost defaults (fine for dev; set vars for production UI builds).
 
 ## Release a version
 
@@ -51,9 +55,9 @@ If unset, release builds use localhost defaults (fine for dev; set vars for prod
 ./scripts/upgrade.sh full
 ```
 
-`upgrade.sh` pulls the latest `etl-deployment` manifest, syncs `IMAGE_TAG` from `VERSION` into `.env`, pulls images, and recreates services.
+`upgrade.sh` pulls the latest `etl-deployment` manifest, syncs `IMAGE_TAG` from `VERSION` into `.env`, pulls images (including the CI-built frontend), and recreates services. On-host frontend rebuild is off by default (`UPGRADE_REBUILD_FRONTEND=true` is vendor-only).
 
-**Important:** [VERSION](VERSION) `platform` must match a tag where **all four** GHCR images exist (`dt-orch-api`, `dt-orch-frontend`, `baas-infra`, `dt-orch-scraper`). If only some images are published (e.g. scraper `v1.0.4` but API still `v1.0.3`), keep `VERSION` at the last complete release. For a **frontend-only** fix, install at `v1.0.3` and run `scripts/rebuild-frontend-from-source.sh` on the server.
+**Important:** [VERSION](VERSION) `platform` must match a tag where **all four** GHCR images exist (`dt-orch-api`, `dt-orch-frontend`, `baas-infra`, `dt-orch-scraper`). If only some images are published (e.g. scraper `v1.0.4` but API still `v1.0.3`), keep `VERSION` at the last complete release. For a **frontend-only** fix, cut a new platform tag so GHCR has a matching `dt-orch-frontend` image, then `./scripts/upgrade.sh full`.
 
 **One-time CI setup:** add org/repo secret `RELEASE_PAT` (PAT with `repo` + `workflow` on all DT Orch repos) to `etl-back` and `etl-deployment`. For GHCR visibility automation on personal accounts, also add `PACKAGES_TOKEN` (PAT with `write:packages`, or include that scope on `RELEASE_PAT`).
 

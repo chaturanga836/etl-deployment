@@ -90,7 +90,10 @@ cd ~/etl-deployment
 
 **EC2 security group:** inbound TCP **3000** (wizard), TCP **80** (platform).
 
-`install.sh` (run by the wizard) builds the frontend image with your **public host** from the wizard — do not rely on pre-built GHCR frontend alone for Keycloak URLs.
+`install.sh` (run by the wizard) **pulls** the CI-built GHCR frontend. Baked localhost
+Keycloak/API URLs are rewritten to the page origin in the browser (nginx proxies
+`/realms/` and `/api/`). No sibling `elt-frontend` clone is required. Set
+`BUILD_INSTALL_FRONTEND=true` only for vendor on-host rebuilds.
 
 ### VERSION and images
 

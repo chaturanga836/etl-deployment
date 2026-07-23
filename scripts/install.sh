@@ -387,33 +387,36 @@ prefer_local_fixed_api_image() {
 
 build_install_frontend_image() {
   local ef="$1"
-  if [[ "${BUILD_INSTALL_FRONTEND:-true}" != "true" ]]; then
-    return 0
-  fi
   # shellcheck source=lib/frontend-install-build.sh
   source "${ROOT_DIR}/scripts/lib/frontend-install-build.sh"
   frontend_install_patch_env_public_urls "$ef" || true
-  if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install" "install"; then
-    if [[ -n "${STATE_DIR:-}" ]]; then
-      frontend_install_verify_image "$ef" || return 1
-    fi
+
+  # Default: pull CI-built GHCR image. Studio rewrites baked localhost URLs to
+  # window.location.origin at runtime (nginx /api + /realms). Opt into on-host
+  # rebuild with BUILD_INSTALL_FRONTEND=true (vendor/dev only).
+  if [[ "${BUILD_INSTALL_FRONTEND:-false}" != "true" ]]; then
+    frontend_install_restore_registry_frontend_image "$ef" || true
+    local image
+    image="$(frontend_install_read_env FRONTEND_IMAGE "$ef")"
+    echo "Using registry frontend image: ${image:-FRONTEND_IMAGE from .env}"
+    echo "  (baked localhost URLs rewritten to page origin in the browser)"
     frontend_install_snapshot_env_on_host "$ef" || true
     return 0
   fi
-  if [[ -n "${STATE_DIR:-}" ]] || [[ "$DEV_BUILD" == true ]]; then
-    echo "ERROR: Frontend build failed — cannot install with registry image (localhost Keycloak URLs)." >&2
-    echo "Common causes: disk full (df -h /), Docker bloat (docker system df)," >&2
-    echo "  private elt-frontend repo (clone needs GITHUB_TOKEN), npm build OOM." >&2
-    echo "Free space on the EC2 host, then:" >&2
-    echo "  docker builder prune -af && docker system prune -af" >&2
-    echo "  git clone https://<GITHUB_PAT>@github.com/chaturanga836/elt-frontend.git \$(dirname \"\$PWD\")/elt-frontend" >&2
-    echo "  bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
-    return 1
+
+  if frontend_install_build "$ROOT_DIR" "$ef" "dt-orch-frontend:install" "install"; then
+    frontend_install_snapshot_env_on_host "$ef" || true
+    return 0
   fi
-  frontend_install_restore_registry_frontend_image "$ef" || true
-  echo "WARN: Install-time frontend build skipped; using registry FRONTEND_IMAGE from .env." >&2
-  echo "WARN: Registry images redirect login to localhost — rebuild frontend before customer use." >&2
-  return 0
+
+  echo "ERROR: On-host frontend build failed (BUILD_INSTALL_FRONTEND=true)." >&2
+  echo "Common causes: disk full (df -h /), Docker bloat (docker system df)," >&2
+  echo "  private elt-frontend repo (clone needs GITHUB_TOKEN), npm build OOM." >&2
+  echo "Or omit BUILD_INSTALL_FRONTEND to use the GHCR image instead." >&2
+  echo "Free space on the EC2 host, then:" >&2
+  echo "  docker builder prune -af && docker system prune -af" >&2
+  echo "  bash scripts/rebuild-frontend-from-source.sh --public-host YOUR_PUBLIC_IP" >&2
+  return 1
 }
 
 show_api_failure_logs() {

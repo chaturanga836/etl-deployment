@@ -490,8 +490,8 @@ git pull
 | Bind mount / host path | `scripts/install.sh`, `scripts/setup-ui.sh`, `compose/installer.yml` |
 | License trial / signature | `installer/shared/license.py`, `scripts/repair-license-keys.py` |
 | API won't start (Pydantic/Cython) | `etl-back/core/config.py`, `etl-back/scripts/cythonize_release.py` |
-| Login → `localhost:8081` | `scripts/lib/frontend-install-build.sh`, `scripts/install.sh`, `elt-frontend/src/lib/keycloak.ts` — then **fresh install**, not rebuild mid-flight |
-| Frontend build: `path ".../elt-frontend" not found` | Wizard `docker build` via socket can’t see host paths — stream context in `frontend-install-build.sh` (`tar \| docker build -`) |
+| Login → `localhost:8081` | Prefer GHCR frontend + runtime rewrite in `elt-frontend/src/lib/keycloak.ts` / `publicUrls.ts`. Confirm nginx proxies `/realms/`. Vendor escape hatch: `BUILD_INSTALL_FRONTEND=true` or `rebuild-frontend-from-source.sh` — then **fresh install**, not mid-flight patch |
+| Frontend on-host build OOM / disk full | Default is pull GHCR — do not clone `elt-frontend` on customer hosts. If `BUILD_INSTALL_FRONTEND=true`, prune Docker + free disk |
 | `realm-management role missing: view-groups` | Keycloak has no such roles — `scripts/bootstrap-workspace-api-roles.py` must use `view-users` / `manage-users` / `query-groups` |
 | Compose / service wiring | `compose/monolith.yml` |
 | Image versions | `VERSION`, `.env.platform.example` |
