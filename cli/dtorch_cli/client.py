@@ -67,6 +67,23 @@ def has_auth() -> bool:
     return bool(get_access_token())
 
 
+def make_platform_client(api_url: str, workspace_id: int) -> DtorchPlatformClient:
+    """Project key/secret client (required for runtime queue demos)."""
+    key, secret = get_project_credentials()
+    if not key or not secret:
+        raise EltClientError(
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET in .env",
+            401,
+            None,
+        )
+    return DtorchPlatformClient(
+        api_url,
+        project_key=key,
+        project_secret=secret,
+        workspace_id=workspace_id,
+    )
+
+
 def make_client(api_url: str, workspace_id: int) -> Union[_PlatformMigrationAdapter, DtorchClient]:
     """Prefer project key/secret; fall back to Studio JWT."""
     key, secret = get_project_credentials()
@@ -111,6 +128,7 @@ def apply_migrations(
 __all__ = [
     "EltClientError",
     "make_client",
+    "make_platform_client",
     "fetch_applied_versions",
     "apply_migrations",
     "get_access_token",

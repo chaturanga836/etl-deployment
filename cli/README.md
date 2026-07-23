@@ -70,6 +70,7 @@ dtorch db push
 | `dtorch db push` | Apply pending migrations to the remote database |
 | `dtorch db push --dry-run` | Preview without applying |
 | `dtorch db push -y` | Apply without confirmation prompt |
+| `dtorch run queue --queue-id <name>` | Push → peek → pop a demo message on a Studio queue |
 
 ## Project layout
 

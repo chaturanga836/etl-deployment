@@ -7,6 +7,7 @@ from urllib.parse import quote, urlencode
 
 from dtorch.database import DatabaseContext
 from dtorch.errors import DtorchValidationError
+from dtorch.runtime_client import DtorchRuntimeClient
 from dtorch.transport import HttpTransport
 
 
@@ -27,6 +28,13 @@ class DtorchPlatformClient:
         self.default_database_id = database_id
         self._http = HttpTransport(
             base_url,
+            project_key=project_key,
+            project_secret=project_secret,
+            timeout=timeout,
+        )
+        self.runtime = DtorchRuntimeClient(
+            base_url,
+            workspace_id=workspace_id,
             project_key=project_key,
             project_secret=project_secret,
             timeout=timeout,

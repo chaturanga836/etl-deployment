@@ -14,6 +14,7 @@ from dtorch_cli.client import (
     fetch_applied_versions,
     has_auth,
     make_client,
+    make_platform_client,
 )
 from dtorch_cli.config import (
     DEFAULT_CONFIG_DIR,
@@ -31,7 +32,7 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 @click.group()
 def cli() -> None:
-    """Dtorch CLI — database migrations for workspace databases."""
+    """Dtorch CLI — migrations and runtime helpers for workspace apps."""
     load_project_env(Path.cwd())
 
 
@@ -243,6 +244,66 @@ def db_push(root: Path, yes: bool, dry_run: bool) -> None:
     click.echo(f"Applied {len(applied_versions)} migration(s), {result.get('statements_executed', 0)} statements.")
     for version in applied_versions:
         click.echo(f"  - {version}")
+
+
+@cli.group()
+def run() -> None:
+    """Run one-shot runtime demos against the linked workspace."""
+
+
+@run.command("queue")
+@click.option(
+    "--queue-id",
+    "queue_name",
+    required=True,
+    help="Queue name from Studio Queues (runtime API identifies queues by name).",
+)
+@click.option("--path", "root", type=click.Path(path_type=Path), default=".", show_default=True)
+def run_queue(queue_name: str, root: Path) -> None:
+    """Push → peek → pop a demo message on the given queue."""
+    load_project_env(root)
+    try:
+        config = load_config(root)
+        api_url, workspace_id, _database_id = require_link(config)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1) from exc
+
+    if not has_auth():
+        click.echo(
+            "Set DTORCH_PROJECT_KEY and DTORCH_PROJECT_SECRET in .env.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    name = queue_name.strip()
+    if not name:
+        click.echo("--queue-id is required (Studio queue name).", err=True)
+        raise SystemExit(1)
+
+    try:
+        client = make_platform_client(api_url, workspace_id)
+        payload = {
+            "type": "dtorch.cli.queue",
+            "at": datetime.now(timezone.utc).isoformat(),
+            "message": "hello from dtorch run queue",
+        }
+        pushed = client.runtime.queue_push(name, payload=payload)
+        click.echo(f"push: {pushed}")
+        peeked = client.runtime.queue_peek(name)
+        click.echo(f"peek: {peeked}")
+        popped = client.runtime.queue_pop(name)
+        click.echo(f"pop:  {popped}")
+        empty = client.runtime.queue_peek(name)
+        click.echo(f"peek after pop: {empty}")
+    except EltClientError as exc:
+        click.echo(f"API error ({exc.status_code}): {exc}", err=True)
+        if exc.status_code == 404:
+            click.echo(
+                f"Create queue {name!r} in Studio Queues for workspace {workspace_id}.",
+                err=True,
+            )
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

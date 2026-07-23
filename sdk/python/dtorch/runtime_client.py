@@ -1,10 +1,11 @@
-"""Workspace API-key client for DT Orch runtime automation."""
+"""Workspace runtime client for DT Orch automation (API key or project credentials)."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 
+from dtorch.errors import DtorchValidationError
 from dtorch.transport import HttpTransport
 
 
@@ -13,12 +14,25 @@ class DtorchRuntimeClient:
         self,
         base_url: str,
         *,
-        api_key: str,
         workspace_id: int,
+        api_key: Optional[str] = None,
+        project_key: Optional[str] = None,
+        project_secret: Optional[str] = None,
         timeout: float = 60.0,
     ) -> None:
+        if bool(project_key) != bool(project_secret):
+            raise DtorchValidationError("project_key and project_secret must be provided together")
+        if not api_key and not (project_key and project_secret):
+            raise DtorchValidationError("Provide api_key or project_key + project_secret")
+
         self.workspace_id = workspace_id
-        self._http = HttpTransport(base_url, api_key=api_key, timeout=timeout)
+        self._http = HttpTransport(
+            base_url,
+            api_key=api_key,
+            project_key=project_key,
+            project_secret=project_secret,
+            timeout=timeout,
+        )
 
     def run_pipeline(
         self,
@@ -84,6 +98,13 @@ class DtorchRuntimeClient:
             "POST",
             f"/api/v1/runtime/workspaces/{self.workspace_id}/queues/"
             f"{quote(queue_name, safe='')}/pop",
+        )
+
+    def queue_peek(self, queue_name: str) -> Optional[Dict[str, Any]]:
+        return self._http.request(
+            "GET",
+            f"/api/v1/runtime/workspaces/{self.workspace_id}/queues/"
+            f"{quote(queue_name, safe='')}/peek",
         )
 
     def notification_publish(
