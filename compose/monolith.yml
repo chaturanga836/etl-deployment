@@ -222,6 +222,8 @@ services:
       PROVISION_MODE: ${PROVISION_MODE:-local}
       DATA_PLANE_NETWORK: ${DATA_PLANE_NETWORK:-data-plane-net}
       LOCAL_POSTGRES_URL: postgresql://${POSTGRES_USER:-elt}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${DTORC_WORKSPACE_DB_NAME:-dtorc_workspace}
+      # Shared installer Redis (compose service name). Not localhost — API runs in another container.
+      LOCAL_REDIS_URL: ${LOCAL_REDIS_URL:-redis://redis:6379/1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - infra_instances:/app/data/instances
