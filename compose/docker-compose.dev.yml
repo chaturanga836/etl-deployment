@@ -27,5 +27,5 @@ services:
       dockerfile: Dockerfile
     image: dt-orch-scraper:${IMAGE_TAG:-v1.0.0}
 
-  # Frontend: pull GHCR (or use BUILD_INSTALL_FRONTEND=true for on-host rebuild).
-  # Runtime rewrite maps baked localhost NEXT_PUBLIC_* to the page origin.
+  # Frontend is built by scripts/lib/frontend-install-build.sh during install
+  # (correct NEXT_PUBLIC_KC_URL = APP_URL). Do not rebuild here — GHCR default was localhost:8081.
