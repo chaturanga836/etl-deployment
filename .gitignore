@@ -13,3 +13,5 @@ installer/frontend/tsconfig.tsbuildinfo
 sdk/javascript/node_modules/
 sdk/python/build/
 sdk/python/*.egg-info/
+.history/*
+
