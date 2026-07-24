@@ -17,6 +17,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { LoadingOutlined } from '@ant-design/icons';
 import {
   ACTIVE_JOB_STORAGE_KEY,
   clearActiveJob,
@@ -183,7 +184,7 @@ export default function App() {
   const [alreadyInstalled, setAlreadyInstalled] = useState<{ login_url?: string } | null>(null);
   const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
   const [jobKind, setJobKind] = useState<'deploy' | 'upgrade'>('deploy');
-  const [prereqsLoading, setPrereqsLoading] = useState(false);
+  const [prereqsLoading, setPrereqsLoading] = useState(true);
   const [dbValidated, setDbValidated] = useState(false);
   const [accountTouched, setAccountTouched] = useState(false);
 
@@ -236,7 +237,14 @@ export default function App() {
 
   useEffect(() => {
     const load = async () => {
-      fetchPrerequisites().then(setPrereqs).catch(() => {});
+      setPrereqsLoading(true);
+      try {
+        setPrereqs(await fetchPrerequisites());
+      } catch {
+        /* welcome step still shows a checking/not-found state */
+      } finally {
+        setPrereqsLoading(false);
+      }
       fetchInstallDefaults().then((defaults) => {
         setInstallDefaults(defaults);
         setWizard((w) => ({
@@ -464,9 +472,27 @@ export default function App() {
                 }
               />
             )}
-            {!prereqs?.docker.available && (
-              <Alert type="warning" message="Docker must be installed on this server before you continue." style={{ marginTop: 16 }} />
-            )}
+            {prereqsLoading ? (
+              <Alert
+                type="info"
+                showIcon
+                icon={<LoadingOutlined spin />}
+                style={{ marginTop: 16 }}
+                message="Checking Docker and system requirements…"
+              />
+            ) : !prereqs?.docker.available ? (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: 16 }}
+                message="Docker must be installed on this server before you continue."
+                action={
+                  <Button size="small" loading={prereqsLoading} onClick={() => void refreshPrereqs()}>
+                    Check again
+                  </Button>
+                }
+              />
+            ) : null}
             {prereqs?.registry && prereqs.registry.accessible === false && (
               <Alert
                 type="warning"
