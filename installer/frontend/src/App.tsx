@@ -52,7 +52,7 @@ const { Paragraph, Text, Link } = Typography;
 const MIN_USERNAME_LENGTH = 3;
 const MIN_PASSWORD_LENGTH = 8;
 
-/** User-visible step labels (matches internal step indices 0–12). */
+/** User-visible step labels (matches internal step indices 0–13). */
 const STEP_LABELS = [
   'Welcome',
   'Type',
@@ -62,6 +62,7 @@ const STEP_LABELS = [
   'Redis',
   'MinIO',
   'Centrifugo',
+  'Grafana',
   'Account',
   'Website',
   'Confirm',
@@ -69,9 +70,9 @@ const STEP_LABELS = [
   'Done',
 ];
 
-const LAST_FORM_STEP = 10;
-const INSTALLING_STEP = 11;
-const DONE_STEP = 12;
+const LAST_FORM_STEP = 11;
+const INSTALLING_STEP = 12;
+const DONE_STEP = 13;
 
 function isAccountStepValid(wizard: WizardState): boolean {
   return (
@@ -119,6 +120,16 @@ function isMinioStepValid(wizard: WizardState): boolean {
 function isCentrifugoStepValid(wizard: WizardState): boolean {
   const c = wizard.centrifugo;
   return Boolean(c.host.trim() && c.http_port && c.api_key.trim() && c.token_hmac_secret_key.trim());
+}
+
+function isGrafanaStepValid(wizard: WizardState): boolean {
+  const g = wizard.grafana;
+  if (g.source === 'skip') return true;
+  if (g.source === 'bundled') {
+    return Boolean(g.port && g.admin_user.trim() && g.admin_password.length >= 8);
+  }
+  const url = g.url.trim();
+  return Boolean(url) && (url.startsWith('http://') || url.startsWith('https://'));
 }
 
 function isWebsiteStepValid(wizard: WizardState): boolean {
@@ -334,13 +345,21 @@ export default function App() {
       message.warning('Fill in all Centrifugo fields before continuing.');
       return;
     }
-    if (step === 8 && !isAccountStepValid(wizard)) {
+    if (step === 8 && !isGrafanaStepValid(wizard)) {
+      if (wizard.grafana.source === 'external') {
+        message.warning('Enter a full Grafana URL (http://… or https://…).');
+      } else {
+        message.warning('Set Grafana port and an admin password (8+ characters).');
+      }
+      return;
+    }
+    if (step === 9 && !isAccountStepValid(wizard)) {
       message.warning(
         `Enter a username (${MIN_USERNAME_LENGTH}+ characters) and password (${MIN_PASSWORD_LENGTH}+ characters).`,
       );
       return;
     }
-    if (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
+    if (step === 10 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard)) {
       message.warning('Enter the website address people will use to open DT Orch.');
       return;
     }
@@ -355,8 +374,9 @@ export default function App() {
     || (step === 5 && !isRedisStepValid(wizard))
     || (step === 6 && !isMinioStepValid(wizard))
     || (step === 7 && !isCentrifugoStepValid(wizard))
-    || (step === 8 && !isAccountStepValid(wizard))
-    || (step === 9 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
+    || (step === 8 && !isGrafanaStepValid(wizard))
+    || (step === 9 && !isAccountStepValid(wizard))
+    || (step === 10 && wizard.deployment_mode === 'monolith' && !isWebsiteStepValid(wizard))
   );
 
   const back = () => setStep((s) => Math.max(0, s - 1));
@@ -989,6 +1009,122 @@ export default function App() {
         );
       case 8:
         return (
+          <Card title="Grafana (monitoring)">
+            <Paragraph type="secondary">
+              Optional dashboards for container CPU, memory, and network (Prometheus + Grafana).
+              You can install a stack on this server or point at an existing Grafana.
+            </Paragraph>
+            <Radio.Group
+              value={wizard.grafana.source}
+              onChange={(e) => {
+                const source = e.target.value as 'bundled' | 'external' | 'skip';
+                update({
+                  grafana: {
+                    ...wizard.grafana,
+                    source,
+                  },
+                });
+              }}
+              style={{ marginBottom: 16 }}
+            >
+              <Space direction="vertical">
+                <Radio value="bundled">
+                  <Text strong>Install Grafana for me</Text>
+                  <br />
+                  <Text type="secondary">Starts Prometheus, Grafana, and cAdvisor with the platform.</Text>
+                </Radio>
+                <Radio value="external">
+                  <Text strong>Connect to existing Grafana</Text>
+                  <br />
+                  <Text type="secondary">Use a Grafana you already run (URL only).</Text>
+                </Radio>
+                <Radio value="skip">
+                  <Text strong>Skip for now</Text>
+                </Radio>
+              </Space>
+            </Radio.Group>
+            {wizard.grafana.source === 'bundled' && (
+              <Form layout="vertical">
+                <Form.Item
+                  label="Grafana port"
+                  required
+                  extra="Open http://your-server:port after install. Allow this port in your security group."
+                >
+                  <InputNumber
+                    value={wizard.grafana.port}
+                    onChange={(v) => update({ grafana: { ...wizard.grafana, port: v || 3002 } })}
+                    style={{ width: '100%' }}
+                    min={1}
+                    max={65535}
+                  />
+                </Form.Item>
+                <Form.Item label="Admin username" required>
+                  <Input
+                    value={wizard.grafana.admin_user}
+                    onChange={(e) => update({ grafana: { ...wizard.grafana, admin_user: e.target.value } })}
+                    autoComplete="off"
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Admin password"
+                  required
+                  extra="At least 8 characters. Change this before exposing the port publicly."
+                  validateStatus={
+                    wizard.grafana.admin_password.length > 0 && wizard.grafana.admin_password.length < 8
+                      ? 'error'
+                      : undefined
+                  }
+                  help={
+                    wizard.grafana.admin_password.length > 0 && wizard.grafana.admin_password.length < 8
+                      ? 'Password must be at least 8 characters.'
+                      : undefined
+                  }
+                >
+                  <Input.Password
+                    value={wizard.grafana.admin_password}
+                    onChange={(e) => update({ grafana: { ...wizard.grafana, admin_password: e.target.value } })}
+                    autoComplete="new-password"
+                  />
+                </Form.Item>
+              </Form>
+            )}
+            {wizard.grafana.source === 'external' && (
+              <Form layout="vertical">
+                <Form.Item
+                  label="Grafana URL"
+                  required
+                  extra="Example: https://grafana.mycompany.com or http://10.0.0.5:3000"
+                  validateStatus={
+                    wizard.grafana.url.trim()
+                    && !(
+                      wizard.grafana.url.trim().startsWith('http://')
+                      || wizard.grafana.url.trim().startsWith('https://')
+                    )
+                      ? 'error'
+                      : undefined
+                  }
+                  help={
+                    wizard.grafana.url.trim()
+                    && !(
+                      wizard.grafana.url.trim().startsWith('http://')
+                      || wizard.grafana.url.trim().startsWith('https://')
+                    )
+                      ? 'URL must start with http:// or https://'
+                      : undefined
+                  }
+                >
+                  <Input
+                    value={wizard.grafana.url}
+                    onChange={(e) => update({ grafana: { ...wizard.grafana, url: e.target.value } })}
+                    placeholder="https://grafana.example.com"
+                  />
+                </Form.Item>
+              </Form>
+            )}
+          </Card>
+        );
+      case 9:
+        return (
           <Card title="Your administrator account">
             <Paragraph type="secondary">
               You will use this to sign in after installation.
@@ -1046,7 +1182,7 @@ export default function App() {
             </Form>
           </Card>
         );
-      case 9:
+      case 10:
         if (wizard.deployment_mode === 'monolith') {
           return (
             <Card title="Your website address">
@@ -1088,7 +1224,7 @@ export default function App() {
             <Paragraph type="secondary">Complete website settings for this install mode.</Paragraph>
           </Card>
         );
-      case 10:
+      case 11:
         return (
           <Card title="Ready to install">
             <Descriptions bordered column={1} size="middle">
@@ -1124,6 +1260,13 @@ export default function App() {
               <Descriptions.Item label="Centrifugo">
                 {wizard.centrifugo.host}:{wizard.centrifugo.http_port}
               </Descriptions.Item>
+              <Descriptions.Item label="Grafana">
+                {wizard.grafana.source === 'skip'
+                  ? 'Skipped'
+                  : wizard.grafana.source === 'bundled'
+                    ? `Install on port ${wizard.grafana.port}`
+                    : `Connect — ${wizard.grafana.url}`}
+              </Descriptions.Item>
               <Descriptions.Item label="Website">
                 {wizard.monolith.public_host
                   ? `http://${wizard.monolith.public_host}`
@@ -1135,7 +1278,7 @@ export default function App() {
             </Button>
           </Card>
         );
-      case 11:
+      case 12:
         return (
           <Card title={jobKind === 'upgrade' ? 'Upgrading…' : 'Installing…'}>
             <Paragraph>
@@ -1173,7 +1316,7 @@ export default function App() {
             </div>
           </Card>
         );
-      case 12:
+      case 13:
         return (
           <>
             <Result
@@ -1193,6 +1336,26 @@ export default function App() {
                 </Paragraph>,
                 wizard.superadmin_username ? (
                   <Paragraph key="a">Administrator: <Text strong>{wizard.superadmin_username}</Text></Paragraph>
+                ) : null,
+                wizard.grafana.source === 'bundled' ? (
+                  <Paragraph key="g">
+                    Grafana:{' '}
+                    <Link
+                      href={`http://${wizard.monolith.public_host || 'localhost'}:${wizard.grafana.port}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {`http://${wizard.monolith.public_host || 'localhost'}:${wizard.grafana.port}`}
+                    </Link>
+                    {' '}(user: {wizard.grafana.admin_user})
+                  </Paragraph>
+                ) : wizard.grafana.source === 'external' && wizard.grafana.url ? (
+                  <Paragraph key="g">
+                    Grafana:{' '}
+                    <Link href={wizard.grafana.url} target="_blank" rel="noreferrer">
+                      {wizard.grafana.url}
+                    </Link>
+                  </Paragraph>
                 ) : null,
                 <Button type="primary" key="go" href={loginUrl || '/login'}>Open DT Orch</Button>,
               ].filter(Boolean)}

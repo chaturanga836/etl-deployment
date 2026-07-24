@@ -118,7 +118,46 @@ def _extra_compose_profiles(config: dict[str, Any]) -> str:
     mongo = config.get("mongo") or {}
     if (mongo.get("source") or "skip").strip().lower() == "bundled":
         profiles.append("workspace-mongo")
+    grafana = config.get("grafana") or {}
+    if (grafana.get("source") or "skip").strip().lower() == "bundled":
+        profiles.append("monitoring")
     return ",".join(profiles)
+
+
+def _grafana_env_lines(config: dict[str, Any], *, public_host: str = "localhost") -> list[str]:
+    """Emit Grafana / monitoring env vars for Studio + compose."""
+    gf = config.get("grafana") or {}
+    source = (gf.get("source") or "skip").strip().lower()
+    if source == "skip":
+        return [
+            "GRAFANA_SOURCE=skip",
+            "GRAFANA_URL=",
+            "NEXT_PUBLIC_GRAFANA_URL=",
+            "",
+        ]
+    if source == "external":
+        url = (gf.get("url") or "").strip().rstrip("/")
+        return [
+            "GRAFANA_SOURCE=external",
+            f"GRAFANA_URL={url}",
+            f"NEXT_PUBLIC_GRAFANA_URL={url}",
+            "",
+        ]
+    # bundled
+    port = int(gf.get("port") or 3002)
+    admin_user = (gf.get("admin_user") or "admin").strip() or "admin"
+    admin_password = (gf.get("admin_password") or "").strip() or "changeme"
+    root_url = f"http://{public_host}:{port}"
+    return [
+        "GRAFANA_SOURCE=bundled",
+        f"GRAFANA_PORT={port}",
+        f"GRAFANA_ADMIN_USER={admin_user}",
+        f"GRAFANA_ADMIN_PASSWORD={admin_password}",
+        f"GRAFANA_ROOT_URL={root_url}",
+        f"GRAFANA_URL={root_url}",
+        f"NEXT_PUBLIC_GRAFANA_URL={root_url}",
+        "",
+    ]
 
 
 def _registry_lines(config: dict[str, Any]) -> list[str]:
@@ -265,6 +304,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"FRONTEND_URL={app_url}",
             "",
         ])
+        lines.extend(_grafana_env_lines(config, public_host=host))
     elif mode == "kubernetes":
         k8s = config.get("kubernetes", {})
         host = k8s.get("ingress_host", "localhost")
@@ -278,6 +318,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"FRONTEND_URL={app_url}",
             "",
         ])
+        lines.extend(_grafana_env_lines(config, public_host=host))
     else:
         dist = config["distributed"]
         services = dist.get("services", {})
@@ -303,6 +344,7 @@ def render_env(config: dict[str, Any]) -> str:
             f"FRONTEND_URL={app_url}",
             "",
         ])
+        lines.extend(_grafana_env_lines(config, public_host=fe_host))
 
     lines.extend([
         "NEXT_PUBLIC_BUILD_ID=production",

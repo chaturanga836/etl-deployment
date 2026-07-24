@@ -57,9 +57,9 @@ ENV_ARG=()
 if [[ -n "$STATE_VOL" && -f "$STATE_VOL/.env" ]]; then
   ENV_ARG=(--env-file "$STATE_VOL/.env")
 fi
-# Include workspace-mysql / workspace-mongo — those services are not on the `full` profile.
-docker compose -f compose/monolith.yml "${ENV_ARG[@]}" \
-  --profile full --profile workspace-mysql --profile workspace-mongo \
+# Include workspace-mysql / workspace-mongo / monitoring — not on the `full` profile alone.
+docker compose -f compose/monolith.yml -f compose/monitoring.yml "${ENV_ARG[@]}" \
+  --profile full --profile workspace-mysql --profile workspace-mongo --profile monitoring \
   down -v --remove-orphans 2>/dev/null || true
 
 echo "=== Stopping setup wizard ==="
@@ -71,6 +71,7 @@ echo "=== Removing leftover DT Orch containers ==="
 for name in \
   dt-orch-api dt-orch-worker dt-orch-frontend dt-orch-scraper dt-orch-installer \
   elt-proxy elt-keycloak elt-postgres elt-mysql elt-mongo elt-redis elt-ollama \
+  elt-prometheus elt-grafana elt-cadvisor \
   baas-infra-service \
   platform-shared-minio-storage platform-shared-centrifugo; do
   docker rm -f "$name" 2>/dev/null || true
@@ -84,7 +85,7 @@ echo "=== Removing DT Orch volumes ==="
 docker volume ls -q | grep -E '^(dt-orch_|etl-deployment_)' | xargs -r docker volume rm 2>/dev/null || true
 docker volume ls -q | grep -E 'installer_state$' | xargs -r docker volume rm 2>/dev/null || true
 # Named volumes from compose (mysql_data / mongo_data) if project prefix differs
-docker volume ls -q | grep -E '(mysql_data|mongo_data|postgres_data|minio_data|infra_instances)$' \
+docker volume ls -q | grep -E '(mysql_data|mongo_data|postgres_data|minio_data|infra_instances|prometheus_data|grafana_data)$' \
   | xargs -r docker volume rm 2>/dev/null || true
 
 echo "=== Removing DT Orch networks ==="

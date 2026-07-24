@@ -47,6 +47,7 @@ class DeployRequest(BaseModel):
     redis: dict[str, Any] = Field(default_factory=dict)
     minio: dict[str, Any] = Field(default_factory=dict)
     centrifugo: dict[str, Any] = Field(default_factory=dict)
+    grafana: dict[str, Any] = Field(default_factory=dict)
     monolith: dict[str, Any] = Field(default_factory=dict)
     distributed: dict[str, Any] = Field(default_factory=dict)
     kubernetes: dict[str, Any] = Field(default_factory=dict)

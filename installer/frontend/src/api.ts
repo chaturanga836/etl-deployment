@@ -44,6 +44,7 @@ export type HostInfo = {
 
 export type ServiceSource = 'bundled' | 'external';
 export type MongoSource = 'bundled' | 'external' | 'skip';
+export type GrafanaSource = 'bundled' | 'external' | 'skip';
 export type WorkspaceSqlEngine = 'postgres' | 'mysql';
 
 export type WizardState = {
@@ -114,6 +115,16 @@ export type WizardState = {
     http_port: number;
     api_key: string;
     token_hmac_secret_key: string;
+  };
+  /** Monitoring — install Prometheus/Grafana or connect an existing Grafana. */
+  grafana: {
+    source: GrafanaSource;
+    /** Public URL when source=external (e.g. https://grafana.example.com). */
+    url: string;
+    /** Host publish port when source=bundled. */
+    port: number;
+    admin_user: string;
+    admin_password: string;
   };
   monolith: {
     public_host: string;
@@ -212,6 +223,13 @@ export const defaultWizard: WizardState = {
     api_key: randomSecret(24),
     token_hmac_secret_key: randomSecret(32),
   },
+  grafana: {
+    source: 'bundled',
+    url: '',
+    port: 3002,
+    admin_user: 'admin',
+    admin_password: randomSecret(12),
+  },
   monolith: {
     public_host: 'localhost',
     use_proxy: true,
@@ -300,6 +318,7 @@ export async function startDeploy(wizard: WizardState): Promise<string> {
       redis: wizard.redis,
       minio: wizard.minio,
       centrifugo: wizard.centrifugo,
+      grafana: wizard.grafana,
       kc_admin_user: wizard.keycloak.admin_user,
       kc_admin_password: wizard.keycloak.admin_password,
       kc_realm: wizard.keycloak.realm,

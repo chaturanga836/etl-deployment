@@ -2,7 +2,7 @@
 # Customer:  scripts/install.sh monolith
 # Dev build:  docker compose -f compose/monolith.yml -f compose/docker-compose.dev.yml up -d --build
 #
-# Profiles: full | backend | frontend | auth | ollama | agent
+# Profiles: full | backend | frontend | auth | ollama | agent | monitoring (via compose/monitoring.yml)
 
 name: dt-orch
 

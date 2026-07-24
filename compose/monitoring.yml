@@ -1,0 +1,71 @@
+# Optional monitoring stack — Prometheus + Grafana + cAdvisor.
+# Enable with compose profile `monitoring` (via EXTRA_COMPOSE_PROFILES or --profile monitoring).
+#
+#   docker compose -f compose/monolith.yml -f compose/monitoring.yml \
+#     --profile full --profile monitoring --env-file .env up -d
+#
+# UI: http://localhost:${GRAFANA_PORT:-3002}  (admin / ${GRAFANA_ADMIN_PASSWORD:-changeme})
+
+services:
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_IMAGE_TAG:-v2.54.1}
+    container_name: elt-prometheus
+    restart: unless-stopped
+    profiles: [monitoring]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    volumes:
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - elt-net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_IMAGE_TAG:-v0.49.1}
+    container_name: elt-cadvisor
+    restart: unless-stopped
+    profiles: [monitoring]
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:${CADVISOR_PORT:-8082}:8080"
+    networks:
+      - elt-net
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_IMAGE_TAG:-11.2.0}
+    container_name: elt-grafana
+    restart: unless-stopped
+    profiles: [monitoring]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3002}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ${ETL_DEPLOYMENT_HOST_ROOT:?Set ETL_DEPLOYMENT_HOST_ROOT}/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3002}:3000"
+    networks:
+      - elt-net
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:

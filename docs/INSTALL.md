@@ -24,7 +24,9 @@ The guided installer is a **browser UI** — no manual `.env` editing. Collect s
 
 Open the URL shown in the terminal (default port **3000**). On AWS EC2, allow inbound **TCP 3000** (wizard) and **TCP 80** (platform after install) in the security group.
 
-Wizard steps: Welcome → Deployment target (monolith / distributed / Kubernetes) → Registry → Super Admin → Database → License (optional trial) → Target config → Review → **Install** → Login URL.
+Wizard steps: Welcome → Type → Database → MongoDB → Keycloak → Redis → MinIO → Centrifugo → **Grafana** → Account → Website → Confirm → **Install** → Done.
+
+
 
 **License:** click **Start 3-month trial** in the wizard, or paste a vendor key. If you skip the license step, a trial is issued automatically at install time.
 
@@ -88,7 +90,7 @@ cd ~/etl-deployment
 3. Click **Install** on Confirm — watch live logs until done
 4. Open `http://<EC2-public-ip>/login`
 
-**EC2 security group:** inbound TCP **3000** (wizard), TCP **80** (platform).
+**EC2 security group:** inbound TCP **3000** (wizard), TCP **80** (platform). If you install Grafana in the wizard, also allow its port (default **3002**).
 
 `install.sh` (run by the wizard) builds the frontend image with your **public host** from the wizard — do not rely on pre-built GHCR frontend alone for Keycloak URLs.
 
@@ -182,6 +184,19 @@ python renderer/render.py --config schema/examples/distributed-aws-vm.json --out
 ```bash
 # Bump IMAGE_TAG in .env or re-render from config
 ./scripts/upgrade.sh full
+```
+
+## Monitoring (Grafana)
+
+Optional Prometheus + Grafana + cAdvisor for container metrics. See **[MONITORING.md](MONITORING.md)**.
+
+```bash
+# In .env:
+EXTRA_COMPOSE_PROFILES=monitoring
+GRAFANA_ADMIN_PASSWORD=change-me
+
+./scripts/install.sh monolith full
+# Open http://localhost:3002  (admin / your password)
 ```
 
 ## Release coordination

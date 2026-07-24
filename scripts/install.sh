@@ -660,6 +660,8 @@ compose_files() {
     esac
   else
     files+=(-f compose/monolith.yml)
+    # Overlay is profile-gated; services start only with --profile monitoring.
+    files+=(-f compose/monitoring.yml)
     if [[ "$DEV_BUILD" == true ]]; then
       files+=(-f compose/docker-compose.dev.yml)
     fi
@@ -825,3 +827,13 @@ DT Orch is running (profile: ${PROFILE}).
 Database migrations run automatically when the API container starts.
 
 EOF
+
+# Optional Grafana (compose profile `monitoring` via EXTRA_COMPOSE_PROFILES).
+if [[ ",${EXTRA_COMPOSE_PROFILES:-}," == *",monitoring,"* ]] || [[ " ${PROFILE_ARGS[*]} " == *" --profile monitoring "* ]]; then
+  cat <<EOF
+Monitoring (Grafana):
+  http://localhost:${GRAFANA_PORT:-3002}
+  user: ${GRAFANA_ADMIN_USER:-admin}
+
+EOF
+fi

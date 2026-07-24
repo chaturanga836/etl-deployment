@@ -101,7 +101,7 @@ if [[ ( -z "$ROLE" && ( "$PROFILE" == "full" || "$PROFILE" == "frontend" ) ) || 
   set +a
 fi
 
-compose_args=(-f "${ROOT_DIR}/compose/monolith.yml")
+compose_args=(-f "${ROOT_DIR}/compose/monolith.yml" -f "${ROOT_DIR}/compose/monitoring.yml")
 if [[ -f "${ROOT_DIR}/compose/docker-compose.dev.yml" ]] && [[ "${ELT_DEV_BUILD:-false}" == "true" ]]; then
   compose_args+=(-f "${ROOT_DIR}/compose/docker-compose.dev.yml")
 fi
@@ -115,11 +115,20 @@ if [[ -n "$ROLE" ]]; then
   esac
 fi
 
+PROFILE_ARGS=(--profile "$PROFILE")
+if [[ -n "${EXTRA_COMPOSE_PROFILES:-}" ]]; then
+  IFS=',' read -r -a _extra_profiles <<< "${EXTRA_COMPOSE_PROFILES}"
+  for _p in "${_extra_profiles[@]}"; do
+    _p="$(echo "$_p" | xargs)"
+    [[ -n "$_p" ]] && PROFILE_ARGS+=(--profile "$_p")
+  done
+fi
+
 echo "Pulling images..."
 docker compose "${compose_args[@]}" --env-file "$env_file" pull || true
 
 echo "Recreating services..."
-docker compose "${compose_args[@]}" --profile "$PROFILE" --env-file "$env_file" up -d --force-recreate
+docker compose "${compose_args[@]}" "${PROFILE_ARGS[@]}" --env-file "$env_file" up -d --force-recreate
 
 # Leftover per-workspace Postgres containers must not remain after shared-SQL upgrades.
 echo "Removing leftover per-workspace Postgres containers (ws-*-postgres-db)..."

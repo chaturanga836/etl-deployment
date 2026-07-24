@@ -6,6 +6,8 @@ Official **self-host install** package and **customer SDK** for **DT Orch** (sel
 
 See **[docs/INSTALL.md](docs/INSTALL.md)** for Compose, Helm, distributed VMs, and upgrades.
 
+Optional **Grafana / Prometheus** monitoring: **[docs/MONITORING.md](docs/MONITORING.md)**.
+
 **AI assistants:** see **[docs/AI_REFERENCE.md](docs/AI_REFERENCE.md)** for architecture, known failures, and debugging playbooks.
 
 Quick start:

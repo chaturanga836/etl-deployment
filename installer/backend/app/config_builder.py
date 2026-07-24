@@ -26,6 +26,7 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
     redis_cfg = wizard.get("redis") or {}
     minio_cfg = wizard.get("minio") or {}
     centrifugo_cfg = wizard.get("centrifugo") or {}
+    grafana_cfg = wizard.get("grafana") or {}
     workspace_sql = wizard.get("workspace_sql") or {}
     mongo_cfg = wizard.get("mongo") or {}
 
@@ -89,6 +90,22 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
         mongo_user = ""
         mongo_db_name = ""
         mongo_password = ""
+
+    grafana_source = (grafana_cfg.get("source") or "skip").strip().lower()
+    if grafana_source not in {"bundled", "external", "skip"}:
+        raise ValueError("grafana.source must be 'bundled', 'external', or 'skip'")
+    grafana_port = int(grafana_cfg.get("port") or 3002)
+    grafana_admin_user = (grafana_cfg.get("admin_user") or "admin").strip() or "admin"
+    grafana_admin_password = (grafana_cfg.get("admin_password") or "").strip() or "changeme"
+    grafana_url = (grafana_cfg.get("url") or "").strip()
+    if grafana_source == "external" and not grafana_url:
+        raise ValueError("grafana.url is required when connecting to an existing Grafana")
+    if grafana_source == "bundled":
+        # Public URL is finalized in the renderer from monolith.public_host + port.
+        grafana_url = ""
+    elif grafana_source == "skip":
+        grafana_url = ""
+        grafana_admin_password = ""
 
     config: dict[str, Any] = {
         "version": "1",
@@ -162,6 +179,13 @@ def build_deployment_config(wizard: dict[str, Any]) -> dict[str, Any]:
             ),
             "api_key": (centrifugo_cfg.get("api_key") or "").strip(),
             "token_hmac_secret_key": (centrifugo_cfg.get("token_hmac_secret_key") or "").strip(),
+        },
+        "grafana": {
+            "source": grafana_source,
+            "url": grafana_url,
+            "port": grafana_port,
+            "admin_user": grafana_admin_user,
+            "admin_password": grafana_admin_password,
         },
         "app": {
             "name": wizard.get("app_name", "DT Orch"),
