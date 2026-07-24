@@ -54,6 +54,9 @@ http://<host>:3002
 
 Default login: `admin` / `changeme` (override with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`).
 
+**In Studio:** open the project sidebar → **Monitor** → **Grafana**. Studio embeds the URL from
+`NEXT_PUBLIC_GRAFANA_URL` (written by the installer for bundled or external Grafana).
+
 A starter dashboard **DT Orch containers** is provisioned under folder **DT Orch**. Prometheus is pre-configured as the default datasource.
 
 ## Security
